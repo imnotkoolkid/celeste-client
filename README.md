@@ -1,4 +1,4 @@
-# Nameless Client(r)
+# Celeste Client
 
 
 ## Build Instructions
@@ -10,7 +10,7 @@ Make sure you have [Node.js](https://nodejs.org/) installed on your machine.
 
 1. Clone this repository (or download the source code):
    ```bash
-   git clone https://github.com/imnotkoolkid/nameless-client-r/
+   git clone https://github.com/imnotkoolkid/celeste-client/
    ```
 2. Open your terminal in the project folder and install dependencies:
    ```bash

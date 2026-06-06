@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 let currentSettings = {};
 const assetCache = new Map();
+let _fontBlobUrl = null;
 function getAssetSync(assetPath, encoding) {
     const key = `${assetPath}_${encoding || 'utf8'}`;
     if (assetCache.has(key)) return assetCache.get(key);
@@ -15,7 +16,16 @@ function getAssetSync(assetPath, encoding) {
     }
 }
 async function getAsset(assetPath, encoding) {
-    return getAssetSync(assetPath, encoding);
+    const key = `${assetPath}_${encoding || 'utf8'}`;
+    if (assetCache.has(key)) return assetCache.get(key);
+    try {
+        const opts = encoding === 'base64' ? { encoding: 'base64' } : 'utf8';
+        const data = await fs.promises.readFile(assetPath, opts);
+        assetCache.set(key, data);
+        return data;
+    } catch {
+        return null;
+    }
 }
 const _styleEls = {};
 function getOrCreate(id, tag = 'style') {
@@ -29,24 +39,10 @@ function getOrCreate(id, tag = 'style') {
     _styleEls[id] = el;
     return el;
 }
-function applyTheme(isNameless, customCssUrl, customCssMode, customCssCode) {
-    const customEl = getOrCreate('nameless-custom-css');
-    if (customCssMode === 'code') {
-        delete customEl.dataset.url;
-        customEl.textContent = customCssCode || '';
-    } else {
-        if (customCssUrl?.trim()) {
-            if (customEl.dataset.url !== customCssUrl) {
-                customEl.dataset.url = customCssUrl;
-                ipcRenderer.invoke('fetch-resource', customCssUrl).then(css => {
-                    if (customEl.dataset.url === customCssUrl) customEl.textContent = css;
-                });
-            }
-        } else {
-            customEl.textContent = '';
-            delete customEl.dataset.url;
-        }
-    }
+function applyTheme(isNameless) {
+    const customEl = getOrCreate('celeste-custom-css');
+    customEl.textContent = '';
+    delete customEl.dataset.url;
     if (isNameless) {
         if (!document.getElementById('nameless-theme-css')) {
             const themePath = path.join(__dirname, 'assets', 'css', 'nameless.css');
@@ -71,7 +67,7 @@ function applyUIScaleAndOpacity(opacity = 100, scale = 100) {
     let css = '';
     if (opacity !== 100) css += `opacity: ${opacity}% !important; `;
     if (scale !== 100) css += `transform: scale(${scale / 100}) !important; `;
-    getOrCreate('nameless-ui-scale-opacity').textContent =
+    getOrCreate('celeste-ui-scale-opacity').textContent =
         css ? `.team-score, .desktop-game-interface { ${css} }` : '';
 }
 function applyGameChat(chatMode) {
@@ -83,7 +79,7 @@ function applyGameChat(chatMode) {
         : chatMode === 'hidden'
             ? `#bottom-left .chat .input-wrapper input, #bottom-left .chat .messages.messages-cont, .desktop-game-interface .chat>.info, .desktop-game-interface .chat .info-key-cont.enter { display: none !important; }`
             : '';
-    getOrCreate('nameless-game-chat').textContent = css;
+    getOrCreate('celeste-game-chat').textContent = css;
 }
 function applyGameCustomizations(hitmarker, killicon) {
     let css = '';
@@ -94,21 +90,15 @@ function applyGameCustomizations(hitmarker, killicon) {
             window._hitmarkObserver = new MutationObserver(mutations => {
                 if (!window._customHitmarkerLink) return;
                 for (const mut of mutations) {
-                    if (mut.type === 'attributes') {
-                        const t = mut.target;
-                        if (t.classList.contains('hitmark') && t.src !== window._customHitmarkerLink) {
-                            t.src = window._customHitmarkerLink;
-                        }
-                    } else if (mut.type === 'childList') {
-                        for (const node of mut.addedNodes) {
-                            if (node.nodeType !== 1) continue;
-                            if (node.classList.contains('hitmark')) {
-                                if (node.src !== window._customHitmarkerLink) node.src = window._customHitmarkerLink;
-                            } else if (node.querySelectorAll) {
-                                const marks = node.querySelectorAll('.hitmark');
-                                for (let i = 0; i < marks.length; i++) {
-                                    if (marks[i].src !== window._customHitmarkerLink) marks[i].src = window._customHitmarkerLink;
-                                }
+                    if (!mut.addedNodes.length) continue;
+                    for (const node of mut.addedNodes) {
+                        if (node.nodeType !== 1) continue;
+                        if (node.classList.contains('hitmark')) {
+                            if (node.src !== window._customHitmarkerLink) node.src = window._customHitmarkerLink;
+                        } else if (node.querySelectorAll) {
+                            const marks = node.querySelectorAll('.hitmark');
+                            for (let i = 0; i < marks.length; i++) {
+                                if (marks[i].src !== window._customHitmarkerLink) marks[i].src = window._customHitmarkerLink;
                             }
                         }
                     }
@@ -117,8 +107,6 @@ function applyGameCustomizations(hitmarker, killicon) {
             window._hitmarkObserver.observe(document.body, {
                 childList: true,
                 subtree: true,
-                attributes: true,
-                attributeFilter: ['src'],
             });
         }
     } else {
@@ -130,16 +118,16 @@ function applyGameCustomizations(hitmarker, killicon) {
     if (killicon?.trim()) {
         css += `.animate-cont::before { content: ""; background: url("${killicon.trim()}") center / contain no-repeat; width: 10rem; height: 10rem; margin-bottom: 2rem; display: inline-block; }\n.animate-cont svg { display: none !important; }\n`;
     }
-    getOrCreate('nameless-game-customizations').textContent = css;
+    getOrCreate('celeste-game-customizations').textContent = css;
 }
 function applyUIAnimations(enabled) {
     if (!enabled) {
-        getOrCreate('nameless-ui-animations').textContent = '* { transition: none !important; animation: none !important; }';
+        getOrCreate('celeste-ui-animations').textContent = '* { transition: none !important; animation: none !important; }';
     } else {
-        const el = document.getElementById('nameless-ui-animations');
+        const el = document.getElementById('celeste-ui-animations');
         if (el) {
             el.remove();
-            delete _styleEls['nameless-ui-animations'];
+            delete _styleEls['celeste-ui-animations'];
         }
     }
 }
@@ -151,14 +139,51 @@ function buildCombo(e) {
     parts.push(e.code);
     return parts.join('+');
 }
-if (!window._namelessInjectedScripts) window._namelessInjectedScripts = new Set();
+const _activeCustomStyles = {};
+function applyCustomStyles(styles) {
+    const activeKeys = new Set();
+    if (styles && Array.isArray(styles)) {
+        for (let i = 0; i < styles.length; i++) {
+            const style = styles[i];
+            if (!style.enabled) continue;
+            const styleKey = `custom-style-${i}-${style.name || 'unnamed'}`;
+            activeKeys.add(styleKey);
+            let el = _activeCustomStyles[styleKey];
+            if (!el) {
+                el = document.createElement('style');
+                el.id = styleKey;
+                document.head.appendChild(el);
+                _activeCustomStyles[styleKey] = el;
+                if (style.mode === 'code') {
+                    el.textContent = style.content;
+                } else if (style.mode === 'url' && style.content) {
+                    ipcRenderer.invoke('fetch-resource', style.content).then(cssCode => {
+                        if (cssCode && _activeCustomStyles[styleKey]) {
+                            el.textContent = cssCode;
+                        }
+                    }).catch(console.error);
+                }
+            } else if (style.mode === 'code' && el.textContent !== style.content) {
+                el.textContent = style.content;
+            }
+        }
+    }
+    for (const key in _activeCustomStyles) {
+        if (!activeKeys.has(key)) {
+            _activeCustomStyles[key].remove();
+            delete _activeCustomStyles[key];
+        }
+    }
+}
+
+if (!window._celesteInjectedScripts) window._celesteInjectedScripts = new Set();
 function applyCustomScripts(scripts) {
     if (!scripts || !Array.isArray(scripts)) return;
     for (const script of scripts) {
         if (!script.enabled) continue;
         const scriptKey = `${script.mode}:${script.content}`;
-        if (window._namelessInjectedScripts.has(scriptKey)) continue;
-        window._namelessInjectedScripts.add(scriptKey);
+        if (window._celesteInjectedScripts.has(scriptKey)) continue;
+        window._celesteInjectedScripts.add(scriptKey);
         if (script.mode === 'code') {
             const el = document.createElement('script');
             el.textContent = script.content;
@@ -193,15 +218,20 @@ async function applyKeystrokeOverlay(enabled, editMode, xOffset, yOffset, remove
         const overlayHtmlPath = path.join(__dirname, 'assets', 'html', 'keystrokeOverlay.html');
         const fontPath = path.join(__dirname, 'assets', 'font', 'forza.ttf');
         const overlayHtml = getAssetSync(overlayHtmlPath);
-        const fontBase64 = getAssetSync(fontPath, 'base64');
         if (!overlayHtml) return;
-        _keystrokeHost = Object.assign(document.createElement('div'), { id: 'nameless-keystroke-host' });
+        if (!_fontBlobUrl) {
+            try {
+                const fontBytes = fs.readFileSync(fontPath);
+                const blob = new Blob([fontBytes], { type: 'font/ttf' });
+                _fontBlobUrl = URL.createObjectURL(blob);
+            } catch (e) { console.error('Failed to create font blob URL:', e); }
+        }
+        _keystrokeHost = Object.assign(document.createElement('div'), { id: 'celeste-keystroke-host' });
         _keystrokeHost.style.cssText = 'position:fixed;z-index:99998;pointer-events:none;top:0;left:0;';
         const shadow = _keystrokeHost.attachShadow({ mode: 'open' });
-        let fontFaceCSS = '';
-        if (fontBase64) {
-            fontFaceCSS = `@font-face { font-family: 'forza'; src: url('data:font/ttf;base64,${fontBase64}') format('truetype'); }`;
-        }
+        const fontFaceCSS = _fontBlobUrl
+            ? `@font-face { font-family: 'forza'; src: url('${_fontBlobUrl}') format('truetype'); }`
+            : '';
         const baseStyle = document.createElement('style');
         baseStyle.textContent = `${fontFaceCSS}
             :host { all: initial; }
@@ -271,7 +301,8 @@ function reapplyKeystroke() {
     );
 }
 function applyAllSettings(s) {
-    applyTheme(s['nameless theme'], s['custom css url'], s['custom css mode'], s['custom css code']);
+    applyTheme(s['nameless theme']);
+    applyCustomStyles(s['custom css list']);
     applyUIScaleAndOpacity(s['in-game ui opacity'], s['in-game ui scale']);
     applyGameChat(s['game chat']);
     applyGameCustomizations(s['custom hitmarker'], s['custom kill icon']);
@@ -297,8 +328,8 @@ contextBridge.exposeInMainWorld('api', {
     },
     updateSetting: (key, value) => {
         currentSettings[key] = value;
-        if (key === 'nameless theme' || key === 'custom css url' || key === 'custom css mode' || key === 'custom css code')
-            applyTheme(currentSettings['nameless theme'], currentSettings['custom css url'], currentSettings['custom css mode'], currentSettings['custom css code']);
+        if (key === 'nameless theme') applyTheme(currentSettings['nameless theme']);
+        if (key === 'custom css list') applyCustomStyles(currentSettings['custom css list']);
         if (key === 'in-game ui opacity' || key === 'in-game ui scale')
             applyUIScaleAndOpacity(currentSettings['in-game ui opacity'], currentSettings['in-game ui scale']);
         if (key === 'game chat') applyGameChat(currentSettings['game chat']);
@@ -319,8 +350,9 @@ contextBridge.exposeInMainWorld('api', {
     actionZoom: dir => ipcRenderer.send('action-zoom', dir),
     buildCombo: (ctrlKey, shiftKey, altKey, code) => buildCombo({ ctrlKey, shiftKey, altKey, code })
 });
-window.addEventListener('DOMContentLoaded', () => {
-    ipcRenderer.invoke('get-settings').then(s => {
+window.addEventListener('DOMContentLoaded', async () => {
+    try {
+        const s = await ipcRenderer.invoke('get-settings');
         currentSettings = s;
         applyAllSettings(s);
         applyCustomScripts(s['custom scripts']);
@@ -328,19 +360,25 @@ window.addEventListener('DOMContentLoaded', () => {
         const fontPath = path.join(__dirname, 'assets', 'font', 'forza.ttf');
         const htmlPath = path.join(__dirname, 'menu.html');
         const jsPath = path.join(__dirname, 'components', 'menu.js');
-        const cssContentRaw = getAssetSync(cssPath);
-        const fontBase64 = getAssetSync(fontPath, 'base64');
-        const htmlContent = getAssetSync(htmlPath);
-        const jsContent = getAssetSync(jsPath);
+        const [cssContentRaw, htmlContent, jsContent, fontBytes] = await Promise.all([
+            fs.promises.readFile(cssPath, 'utf8').catch(() => null),
+            fs.promises.readFile(htmlPath, 'utf8').catch(() => null),
+            fs.promises.readFile(jsPath, 'utf8').catch(() => null),
+            fs.promises.readFile(fontPath).catch(() => null),
+        ]);
+        if (!_fontBlobUrl && fontBytes) {
+            const blob = new Blob([fontBytes], { type: 'font/ttf' });
+            _fontBlobUrl = URL.createObjectURL(blob);
+        }
         let styleEl = null;
         if (cssContentRaw) {
             let cssContent = cssContentRaw;
-            if (fontBase64) {
-                cssContent = cssContent.replace('../assets/font/forza.ttf', `data:font/ttf;base64,${fontBase64}`);
-                if (!document.getElementById('nameless-global-font')) {
+            if (_fontBlobUrl) {
+                cssContent = cssContent.replace('../assets/font/forza.ttf', _fontBlobUrl);
+                if (!document.getElementById('celeste-global-font')) {
                     const globalFontEl = document.createElement('style');
-                    globalFontEl.id = 'nameless-global-font';
-                    globalFontEl.textContent = `@font-face { font-family: 'forza'; src: url('data:font/ttf;base64,${fontBase64}') format('truetype'); }`;
+                    globalFontEl.id = 'celeste-global-font';
+                    globalFontEl.textContent = `@font-face { font-family: 'forza'; src: url('${_fontBlobUrl}') format('truetype'); }`;
                     document.head.appendChild(globalFontEl);
                 }
             }
@@ -349,7 +387,7 @@ window.addEventListener('DOMContentLoaded', () => {
         }
         if (!htmlContent) return;
         const host = document.createElement('div');
-        host.id = 'nameless-menu-host';
+        host.id = 'celeste-menu-host';
         host.style.cssText = 'position:absolute;top:0;left:0;width:0;height:0;overflow:visible;z-index:99999;';
         const shadowRoot = host.attachShadow({ mode: 'open' });
         if (styleEl) shadowRoot.appendChild(styleEl);
@@ -359,13 +397,13 @@ window.addEventListener('DOMContentLoaded', () => {
         document.body.appendChild(host);
         if (jsContent) {
             const scriptEl = document.createElement('script');
-            scriptEl.textContent = `(function(){const root=document.getElementById('nameless-menu-host').shadowRoot;\n${jsContent}\n})();`;
+            scriptEl.textContent = `(function(){const root=document.getElementById('celeste-menu-host').shadowRoot;\n${jsContent}\n})();`;
             document.body.appendChild(scriptEl);
         }
         let _menuOverlay = null;
         const getMenuOverlay = () => {
             if (!_menuOverlay) {
-                _menuOverlay = document.getElementById('nameless-menu-host')?.shadowRoot?.getElementById('nameless-menu-overlay');
+                _menuOverlay = document.getElementById('celeste-menu-host')?.shadowRoot?.getElementById('celeste-menu-overlay');
             }
             return _menuOverlay;
         };
@@ -400,5 +438,7 @@ window.addEventListener('DOMContentLoaded', () => {
             }
         });
         document.addEventListener('keyup', e => highlightKeystrokeKey(e.code, false));
-    }).catch(e => console.error('Failed to inject Nameless menu:', e));
+    } catch (e) {
+        console.error('Failed to inject Celeste menu:', e);
+    }
 });

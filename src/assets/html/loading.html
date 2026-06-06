@@ -1,0 +1,76 @@
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  @font-face {
+    font-family: 'PLANK';
+    src: url('../font/hypik.otf') format('opentype');
+  }
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; height: 100%;
+    background: transparent;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+  #celeste {
+    display: flex;
+    gap: 0.6em;
+  }
+  #celeste span {
+    font-family: 'PLANK', 'Impact', 'Arial Black', sans-serif;
+    font-size: clamp(48px, 10vw, 96px);
+    font-weight: 400;
+    color: #ffffff;
+    width: 0.7em;
+    height: 1.2em;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    user-select: none;
+    -webkit-font-smoothing: antialiased;
+  }
+  #celeste span:nth-child(2),
+  #celeste span:nth-child(3) {
+    margin-right: 18px;
+  }
+</style>
+</head>
+<body>
+<div id="celeste"></div>
+<script>
+  const WORD = "CELESTE";
+  const CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789#@!&%$?";
+  const container = document.getElementById("celeste");
+
+  const spans = WORD.split("").map(c => {
+    const s = document.createElement("span");
+    s.textContent = c;
+    container.appendChild(s);
+    return s;
+  });
+
+  function scramble() {
+    let iter = 0, total = 20;
+    const iv = setInterval(() => {
+      spans.forEach((s, i) => {
+        if (i < Math.floor(iter * WORD.length / total)) {
+          s.textContent = WORD[i];
+        } else {
+          s.textContent = CHARS[Math.floor(Math.random() * CHARS.length)];
+        }
+      });
+      iter++;
+      if (iter > total) {
+        spans.forEach((s, i) => s.textContent = WORD[i]);
+        clearInterval(iv);
+        setTimeout(scramble, 1800);
+      }
+    }, 55);
+  }
+
+  scramble();
+</script>
+</body>
+</html>

@@ -50,17 +50,12 @@ window.api.getSettings().then(settings => {
         const inputPairs = [
             ['input-hitmarker', 'custom hitmarker'],
             ['input-killicon', 'custom kill icon'],
-            ['input-custom-css-url', 'custom css url'],
-            ['input-custom-css-code', 'custom css code'],
         ];
         for (const [id, key] of inputPairs) {
             const el = $(id);
             if (el) el.value = s[key] || '';
         }
-        const cssMode = s['custom css mode'] || 'url';
-        $('css-mode-group')?.querySelectorAll('.btn-box').forEach(b =>
-            b.classList.toggle('active', b.dataset.val === cssMode));
-        showContainers(cssMode, 'custom-css-url-container', 'custom-css-code-container');
+
         const chatMode = s['game chat'] || 'default';
         $('group-chat-mode')?.querySelectorAll('.btn-box').forEach(b =>
             b.classList.toggle('active', b.dataset.val === chatMode));
@@ -106,21 +101,6 @@ window.api.getSettings().then(settings => {
     bindInput('input-hitmarker', 'custom hitmarker');
     bindInput('input-killicon', 'custom kill icon');
     const themeToggle = $('toggle-nameless-theme');
-    const checkDisableNamelessTheme = () => {
-        const mode = $('css-mode-group')?.querySelector('.btn-box.active')?.dataset.val || 'url';
-        const hasVal = mode === 'code'
-            ? $('input-custom-css-code')?.value.trim()
-            : $('input-custom-css-url')?.value.trim();
-        if (hasVal) { themeToggle.checked = false; window.api.updateSetting('nameless theme', false); }
-    };
-    ['input-custom-css-url', 'input-custom-css-code'].forEach(id => {
-        const key = id === 'input-custom-css-url' ? 'custom css url' : 'custom css code';
-        $(id)?.addEventListener('input', e => {
-            settings[key] = e.target.value;
-            window.api.updateSetting(key, e.target.value);
-            checkDisableNamelessTheme();
-        });
-    });
     const bindButtonGroup = (groupId, onSelect) => {
         const group = $(groupId);
         if (!group) return;
@@ -131,12 +111,6 @@ window.api.getSettings().then(settings => {
             onSelect(box.dataset.val);
         }));
     };
-    bindButtonGroup('css-mode-group', val => {
-        settings['custom css mode'] = val;
-        window.api.updateSetting('custom css mode', val);
-        showContainers(val, 'custom-css-url-container', 'custom-css-code-container');
-        checkDisableNamelessTheme();
-    });
     bindButtonGroup('group-chat-mode', val => window.api.updateSetting('game chat', val));
     const bindSlider = (inputId, valId, key) => {
         const input = $(inputId), valEl = $(valId);
@@ -241,6 +215,95 @@ window.api.getSettings().then(settings => {
     });
     bindButtonGroup('plugin-script-mode-group', val =>
         showContainers(val, 'plugin-script-url-container', 'plugin-script-code-container'));
+
+    bindButtonGroup('plugin-css-mode-group', val =>
+        showContainers(val, 'plugin-css-url-container', 'plugin-css-code-container'));
+
+    const renderPluginCSS = () => {
+        const list = $('manage-css-list');
+        if (!list) return;
+        while (list.firstChild) list.removeChild(list.firstChild);
+        const styles = settings['custom css list'] || [];
+        if (styles.length === 0) return;
+        const frag = document.createDocumentFragment();
+        styles.forEach((style, idx) => {
+            const item = document.createElement('div');
+            item.className = 'plugin-script-item';
+            const nameSpan = document.createElement('span');
+            nameSpan.className = 'setting-label';
+            nameSpan.textContent = style.name || `CSS ${idx + 1}`;
+            const controls = document.createElement('div');
+            controls.style.cssText = 'display:flex;align-items:center;gap:8px;';
+            const delBtn = document.createElement('button');
+            delBtn.className = 'plugin-btn-remove';
+            delBtn.textContent = 'Remove';
+            const label = document.createElement('label');
+            label.className = 'toggle-switch';
+            const chk = document.createElement('input');
+            chk.type = 'checkbox';
+            chk.checked = !!style.enabled;
+            const sliderSpan = document.createElement('span');
+            sliderSpan.className = 'slider';
+            label.appendChild(chk);
+            label.appendChild(sliderSpan);
+            controls.appendChild(delBtn);
+            controls.appendChild(label);
+            item.appendChild(nameSpan);
+            item.appendChild(controls);
+            let undoTimer = null, countdownTimer = null;
+            delBtn.addEventListener('click', () => {
+                if (delBtn.classList.contains('undo-mode')) {
+                    clearTimeout(undoTimer);
+                    clearInterval(countdownTimer);
+                    delBtn.classList.remove('undo-mode');
+                    delBtn.textContent = 'Remove';
+                } else {
+                    delBtn.classList.add('undo-mode');
+                    let t = 3;
+                    delBtn.textContent = `Undo (${t}s)`;
+                    countdownTimer = setInterval(() => {
+                        delBtn.textContent = `Undo (${--t}s)`;
+                        if (t <= 0) clearInterval(countdownTimer);
+                    }, 1000);
+                    undoTimer = setTimeout(() => {
+                        const i = settings['custom css list'].indexOf(style);
+                        if (i !== -1) {
+                            settings['custom css list'].splice(i, 1);
+                            window.api.updateSetting('custom css list', settings['custom css list']);
+                        }
+                        renderPluginCSS();
+                    }, 3000);
+                }
+            });
+            chk.addEventListener('change', e => {
+                style.enabled = e.target.checked;
+                window.api.updateSetting('custom css list', settings['custom css list']);
+            });
+            frag.appendChild(item);
+        });
+        list.appendChild(frag);
+    };
+    renderPluginCSS();
+
+    $('btn-add-plugin-css')?.addEventListener('click', () => {
+        const mode = $('plugin-css-mode-group')?.querySelector('.active')?.dataset.val ?? 'url';
+        const nameInput = $('input-plugin-css-name');
+        const name = nameInput.value.trim() || `CSS ${(settings['custom css list'] || []).length + 1}`;
+        const content = (mode === 'url'
+            ? $('input-plugin-css-url')
+            : $('input-plugin-css-code'))?.value.trim();
+        if (!content) return;
+        if (!settings['custom css list']) settings['custom css list'] = [];
+        settings['custom css list'].push({ name, mode, content, enabled: true });
+        window.api.updateSetting('custom css list', settings['custom css list']);
+        nameInput.value = '';
+        const urlEl = $('input-plugin-css-url');
+        const codeEl = $('input-plugin-css-code');
+        if (urlEl) urlEl.value = '';
+        if (codeEl) codeEl.value = '';
+        renderPluginCSS();
+    });
+
     const renderPluginScripts = () => {
         const list = $('manage-scripts-list');
         if (!list) return;
@@ -391,10 +454,10 @@ window.api.getSettings().then(settings => {
                         el.style.display = items.some(i => i.style.display !== 'none') ? '' : 'none';
                     }
                 }
-                const cssMode = settings['custom css mode'] || 'url';
                 const pluginMode = $('plugin-script-mode-group')?.querySelector('.active')?.dataset.val ?? 'url';
-                showContainers(cssMode, 'custom-css-url-container', 'custom-css-code-container');
+                const cssMode = $('plugin-css-mode-group')?.querySelector('.active')?.dataset.val ?? 'url';
                 showContainers(pluginMode, 'plugin-script-url-container', 'plugin-script-code-container');
+                showContainers(cssMode, 'plugin-css-url-container', 'plugin-css-code-container');
                 if (bestPaneId) switchTab(bestPaneId);
             }, 100);
         });

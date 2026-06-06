@@ -22,7 +22,7 @@ const STATIC_STATES = {
     '/inventory': 'Viewing their inventory'
 };
 const CLIENT_ID = '1506214153369423922';
-const DOWNLOAD_BUTTON = { label: 'Download', url: 'https://github.com/imnotkoolkid/nameless-client-r/releases' };
+const DOWNLOAD_BUTTON = { label: 'Download', url: 'https://github.com/imnotkoolkid/celeste-client/releases' };
 class DRPC {
     constructor() {
         this.client = new DiscordRPC.Client({ transport: 'ipc' });
@@ -58,8 +58,8 @@ class DRPC {
         }
         const activity = {
             startTimestamp: this.time,
-            largeImageKey: 'nameless',
-            largeImageText: 'Nameless Client(r)',
+            largeImageKey: 'celeste',
+            largeImageText: 'Celeste Client',
             instance: true,
             buttons
         };

@@ -1,5 +1,5 @@
-<div id="nameless-menu-overlay" style="display: none;">
-  <div class="nameless-menu">
+<div id="celeste-menu-overlay" style="display: none;">
+  <div class="celeste-menu">
     <div class="menu-tabs">
       <div class="tab active" data-target="tab-ui">UI</div>
       <div class="tab" data-target="tab-performance">PERFORMANCE</div>
@@ -57,21 +57,53 @@
             <label class="toggle-switch"><input type="checkbox" id="toggle-nameless-theme" checked><span
                 class="slider"></span></label>
           </div>
-          <div class="setting-item sub-item">
-            <span class="setting-label">Custom CSS Mode</span>
-            <div class="button-group" id="css-mode-group">
-              <span class="btn-box active" data-val="url">URL</span>
-              <span class="btn-box" data-val="code">Code</span>
+        </div>
+        <div class="setting-category">
+          <div class="category-header">CSS</div>
+
+          <div class="setting-item sub-item plugin-dropdown-toggle" data-target="plugin-add-css-content">
+            <span class="setting-label">Add CSS</span>
+            <svg class="dropdown-arrow" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+              fill="none" stroke="#9c9ba4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="m18 15-6-6-6 6" />
+            </svg>
+          </div>
+          <div id="plugin-add-css-content" class="plugin-dropdown-content">
+            <div class="setting-item sub-item">
+              <span class="setting-label">Mode</span>
+              <div class="button-group" id="plugin-css-mode-group">
+                <span class="btn-box active" data-val="url">URL</span>
+                <span class="btn-box" data-val="code">Code</span>
+              </div>
+            </div>
+            <div class="setting-item sub-item" id="plugin-css-url-container">
+              <span class="setting-label">CSS URL</span>
+              <input type="text" class="setting-input" id="input-plugin-css-url" placeholder="https://.../.css">
+            </div>
+            <div class="setting-item sub-item" id="plugin-css-code-container" style="display: none;">
+              <span class="setting-label">CSS Code</span>
+              <textarea class="setting-input" id="input-plugin-css-code"
+                placeholder="/* Paste your custom CSS here */" style="min-height: 80px;"></textarea>
+            </div>
+            <div class="setting-item sub-item">
+              <span class="setting-label">CSS Name</span>
+              <input type="text" class="setting-input" id="input-plugin-css-name" placeholder="My CSS">
+            </div>
+            <div class="setting-item sub-item">
+              <span class="setting-label"></span>
+              <button id="btn-add-plugin-css" class="plugin-btn-add">Add</button>
             </div>
           </div>
-          <div class="setting-item sub-item" id="custom-css-url-container">
-            <span class="setting-label">CSS URL</span>
-            <input type="text" class="setting-input" id="input-custom-css-url" placeholder="https://.../.css">
+
+          <div class="setting-item sub-item plugin-dropdown-toggle" data-target="plugin-manage-css-content">
+            <span class="setting-label">Manage CSS</span>
+            <svg class="dropdown-arrow" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+              fill="none" stroke="#9c9ba4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="m18 15-6-6-6 6" />
+            </svg>
           </div>
-          <div class="setting-item sub-item" id="custom-css-code-container" style="display: none;">
-            <span class="setting-label">CSS Code</span>
-            <textarea class="setting-input" id="input-custom-css-code"
-              placeholder="/* Paste your custom CSS here */"></textarea>
+          <div id="plugin-manage-css-content" class="plugin-dropdown-content">
+            <div id="manage-css-list" style="display: flex; flex-direction: column;"></div>
           </div>
         </div>
 

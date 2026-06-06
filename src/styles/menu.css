@@ -28,7 +28,7 @@
   font-family: 'forza', sans-serif !important;
 }
 
-#nameless-menu-overlay {
+#celeste-menu-overlay {
   all: initial;
   position: fixed;
   top: 0; left: 0;
@@ -40,7 +40,7 @@
   user-select: none;
 }
 
-.nameless-menu {
+.celeste-menu {
   width: 540px;
   background-color: var(--bg1);
   border-radius: var(--br-rd);

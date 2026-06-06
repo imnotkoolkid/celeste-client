@@ -2,8 +2,8 @@ const { app, BrowserWindow, Menu, ipcMain, net } = require('electron');
 const path = require('path');
 const settingsManager = require('./components/settingsManager');
 const drpc = require('./components/drpc');
-app.setName('Nameless Client(r)');
-app.setAppUserModelId('dev.imnotkoolkid.namelessclient');
+app.setName('Celeste Client');
+app.setAppUserModelId('dev.imnotkoolkid.celesteclient');
 settingsManager.init();
 drpc.init(settingsManager.settings);
 let mainWindow;
@@ -11,7 +11,7 @@ function createWindow() {
   mainWindow = new BrowserWindow({
     minWidth: 900,
     minHeight: 540,
-    title: 'Nameless(r)',
+    title: 'Celeste',
     backgroundColor: '#1e1e1e',
     icon: path.join(__dirname, 'assets/img/icon.png'),
     show: false,
@@ -31,7 +31,7 @@ function createWindow() {
     if (!settingsManager.get('start fullscreen')) mainWindow.maximize();
     mainWindow.show();
   });
-  mainWindow.loadURL('https://kirka.io');
+  mainWindow.loadURL('https://kirka.io/');
   const onNavigate = (_, url) => drpc.setState(url);
   mainWindow.webContents.on('did-navigate', onNavigate);
   mainWindow.webContents.on('did-navigate-in-page', onNavigate);
@@ -43,20 +43,30 @@ function createWindow() {
 app.whenReady().then(() => {
   createWindow();
   const fs = require('fs');
-  const MAX_CACHE = 64;
-  const resourceCache = new Map();
-  const cacheSet = (url, body) => {
-    if (resourceCache.size >= MAX_CACHE) {
-      resourceCache.delete(resourceCache.keys().next().value);
+  const MAX_CACHE = 256;
+  class LRUCache {
+    constructor(max) { this.max = max; this.map = new Map(); }
+    has(key) { return this.map.has(key); }
+    get(key) {
+      if (!this.map.has(key)) return undefined;
+      const val = this.map.get(key);
+      this.map.delete(key);
+      this.map.set(key, val);
+      return val;
     }
-    resourceCache.set(url, body);
-  };
+    set(key, val) {
+      if (this.map.has(key)) this.map.delete(key);
+      else if (this.map.size >= this.max) this.map.delete(this.map.keys().next().value);
+      this.map.set(key, val);
+    }
+  }
+  const resourceCache = new LRUCache(MAX_CACHE);
   ipcMain.handle('fetch-resource', (_, url) => new Promise(resolve => {
     if (resourceCache.has(url)) return resolve(resourceCache.get(url));
     if (!url.startsWith('http://') && !url.startsWith('https://')) {
       fs.readFile(url, 'utf8', (err, data) => {
         const body = err ? '' : data;
-        cacheSet(url, body);
+        resourceCache.set(url, body);
         resolve(body);
       });
       return;
@@ -67,8 +77,8 @@ app.whenReady().then(() => {
       req.on('response', res => {
         res.on('data', chunk => chunks.push(chunk));
         res.on('end', () => {
-          const body = chunks.join('');
-          cacheSet(url, body);
+          const body = Buffer.concat(chunks).toString('utf8');
+          resourceCache.set(url, body);
           resolve(body);
         });
       });
