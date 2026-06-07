@@ -1,0 +1,26 @@
+appId: dev.imnotkoolkid.celesteclient
+productName: Celeste Client
+artifactName: "${productName}-${os}.${ext}"
+npmRebuild: false
+publish:
+  - provider: github
+    releaseType: release
+directories:
+  output: dist
+files:
+  - "**/*"
+  - "!dist/**/*"
+  - "!node_modules/.cache/**/*"
+asar: true
+win:
+  target: nsis
+  icon: src/assets/img/icon.ico
+  executableName: celeste-client
+linux:
+  target: AppImage
+  icon: src/assets/img/icon.png
+  category: Utility
+mac:
+  target: dmg
+  icon: src/assets/img/icon.icns
+  identity: null
