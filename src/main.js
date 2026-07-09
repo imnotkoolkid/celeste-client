@@ -1,10 +1,15 @@
-const { app, BrowserWindow, Menu, ipcMain, net } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, net, protocol, shell } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('path');
-const settingsManager = require('./components/settingsManager');
-const drpc = require('./components/drpc');
+const settingsManager          = require('./components/settingsManager');
+const drpc                     = require('./components/drpc');
+const { initResourceSwapper, getSwapperFolder } = require('./components/swapper');
 app.setName('Celeste Client');
 app.setAppUserModelId('dev.imnotkoolkid.celesteclient');
+app.commandLine.appendSwitch('js-flags', '--max-old-space-size=4096 --turbo-fast-api-calls --future');
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'celeste', privileges: { secure: true, standard: true, supportFetchAPI: true, corsEnabled: true } }
+]);
 settingsManager.init();
 drpc.init(settingsManager.settings);
 
@@ -139,6 +144,15 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  const os = require('os');
+  try {
+    os.setPriority(os.constants.priority.PRIORITY_HIGH);
+  } catch (e) {
+    console.error('Failed to set process priority:', e);
+  }
+
+  initResourceSwapper(settingsManager.get('swapper enabled') !== false);
+
   createSplash();
 
   configureUpdater();
@@ -204,6 +218,12 @@ app.whenReady().then(() => {
   ipcMain.on('action-devtools', e => {
     const win = BrowserWindow.fromWebContents(e.sender);
     if (win) win.webContents.toggleDevTools();
+  });
+  ipcMain.on('action-open-swapper-folder', () => {
+    const folder = getSwapperFolder();
+    const fs = require('fs');
+    if (!fs.existsSync(folder)) fs.mkdirSync(folder, { recursive: true });
+    shell.openPath(folder);
   });
   ipcMain.on('action-quick-restart', () => { app.relaunch(); app.exit(); });
   let _zoomLevel = settingsManager.get('zoom level') || 0;

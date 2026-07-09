@@ -1,6 +1,28 @@
 const { contextBridge, ipcRenderer } = require('electron');
 const fs = require('fs');
 const path = require('path');
+
+
+try {
+    const __gpuPatch = document.createElement('script');
+    __gpuPatch.textContent = `(function(){
+        if (window.__celesteGpuPatched) return;
+        window.__celesteGpuPatched = true;
+        var _orig = HTMLCanvasElement.prototype.getContext;
+        HTMLCanvasElement.prototype.getContext = function(type, attrs) {
+            if (type === 'webgl' || type === 'webgl2' || type === 'experimental-webgl') {
+                attrs = Object.assign({}, attrs || {});
+                attrs.powerPreference = 'high-performance';
+                attrs.desynchronized = true; 
+            }
+            return _orig.call(this, type, attrs);
+        };
+    })();`;
+    document.documentElement.appendChild(__gpuPatch);
+    __gpuPatch.remove();
+} catch (_) {}
+
+
 let currentSettings = {};
 const assetCache = new Map();
 let _fontBlobUrl = null;
@@ -15,18 +37,7 @@ function getAssetSync(assetPath, encoding) {
         return null;
     }
 }
-async function getAsset(assetPath, encoding) {
-    const key = `${assetPath}_${encoding || 'utf8'}`;
-    if (assetCache.has(key)) return assetCache.get(key);
-    try {
-        const opts = encoding === 'base64' ? { encoding: 'base64' } : 'utf8';
-        const data = await fs.promises.readFile(assetPath, opts);
-        assetCache.set(key, data);
-        return data;
-    } catch {
-        return null;
-    }
-}
+
 const _styleEls = {};
 function getOrCreate(id, tag = 'style') {
     if (_styleEls[id]) return _styleEls[id];
@@ -39,27 +50,27 @@ function getOrCreate(id, tag = 'style') {
     _styleEls[id] = el;
     return el;
 }
-function applyTheme(isNameless) {
+function applyTheme(isCeleste) {
     const customEl = getOrCreate('celeste-custom-css');
     customEl.textContent = '';
     delete customEl.dataset.url;
-    if (isNameless) {
-        if (!document.getElementById('nameless-theme-css')) {
-            const themePath = path.join(__dirname, 'assets', 'css', 'nameless.css');
+    if (isCeleste) {
+        if (!document.getElementById('celeste-theme-css')) {
+            const themePath = path.join(__dirname, 'assets', 'css', 'celeste.css');
             const css = getAssetSync(themePath);
             if (css) {
                 const el = document.createElement('style');
-                el.id = 'nameless-theme-css';
+                el.id = 'celeste-theme-css';
                 el.textContent = css;
                 document.head.appendChild(el);
-                _styleEls['nameless-theme-css'] = el;
+                _styleEls['celeste-theme-css'] = el;
             }
         }
     } else {
-        const el = document.getElementById('nameless-theme-css');
+        const el = document.getElementById('celeste-theme-css');
         if (el) {
             el.remove();
-            delete _styleEls['nameless-theme-css'];
+            delete _styleEls['celeste-theme-css'];
         }
     }
 }
@@ -85,36 +96,13 @@ function applyGameCustomizations(hitmarker, killicon) {
     let css = '';
     window._customHitmarkerLink = hitmarker?.trim() || null;
     if (window._customHitmarkerLink) {
-        css += `.hitmark { background: url("${window._customHitmarkerLink}") center / contain no-repeat !important; object-position: -99999px 99999px !important; }\n`;
-        if (!window._hitmarkObserver) {
-            window._hitmarkObserver = new MutationObserver(mutations => {
-                if (!window._customHitmarkerLink) return;
-                for (const mut of mutations) {
-                    if (!mut.addedNodes.length) continue;
-                    for (const node of mut.addedNodes) {
-                        if (node.nodeType !== 1) continue;
-                        if (node.classList.contains('hitmark')) {
-                            if (node.src !== window._customHitmarkerLink) node.src = window._customHitmarkerLink;
-                        } else if (node.querySelectorAll) {
-                            const marks = node.querySelectorAll('.hitmark');
-                            for (let i = 0; i < marks.length; i++) {
-                                if (marks[i].src !== window._customHitmarkerLink) marks[i].src = window._customHitmarkerLink;
-                            }
-                        }
-                    }
-                }
-            });
-            window._hitmarkObserver.observe(document.body, {
-                childList: true,
-                subtree: true,
-            });
-        }
-    } else {
-        if (window._hitmarkObserver) {
-            window._hitmarkObserver.disconnect();
-            window._hitmarkObserver = null;
-        }
+        css += `.hitmark { content: url("${window._customHitmarkerLink}") !important; }\n`;
     }
+    if (window._hitmarkObserver) {
+        window._hitmarkObserver.disconnect();
+        window._hitmarkObserver = null;
+    }
+
     if (killicon?.trim()) {
         css += `.animate-cont::before { content: ""; background: url("${killicon.trim()}") center / contain no-repeat; width: 10rem; height: 10rem; margin-bottom: 2rem; display: inline-block; }\n.animate-cont svg { display: none !important; }\n`;
     }
@@ -149,6 +137,18 @@ function applyTabInfo(enabled) {
         if (el) {
             el.remove();
             delete _styleEls['celeste-tab-info-css'];
+        }
+    }
+}
+function applySkipLoadingScreen(enabled) {
+    const id = 'celeste-skip-loading-css';
+    if (enabled) {
+        getOrCreate(id).textContent = '.loading-scene { display: none !important; }';
+    } else {
+        const el = document.getElementById(id);
+        if (el) {
+            el.remove();
+            delete _styleEls[id];
         }
     }
 }
@@ -228,7 +228,7 @@ function _buildKeyMap(shadow) {
         _keystrokeKeyMap.set(el.getAttribute('data-code'), el);
     });
 }
-async function applyKeystrokeOverlay(enabled, editMode, xOffset, yOffset, removedKeys) {
+async function applyKeystrokeOverlay(enabled, editMode, xOffset, yOffset, scale, removedKeys) {
     if (!enabled) {
         _keystrokeHost?.remove();
         _keystrokeHost = null;
@@ -292,6 +292,9 @@ async function applyKeystrokeOverlay(enabled, editMode, xOffset, yOffset, remove
     if (!wrapper || !keysOverlay) return;
     wrapper.style.top = `${Number(yOffset) || 0}px`;
     wrapper.style.left = `${Number(xOffset) || 0}px`;
+    const scaleVal = (Number(scale) || 100) / 100;
+    keysOverlay.style.transform = scaleVal !== 1 ? `scale(${scaleVal})` : '';
+    keysOverlay.style.transformOrigin = 'top left';
     const rKeys = removedKeys || [];
     if (_keystrokeKeyMap) {
         _keystrokeKeyMap.forEach((el, code) => {
@@ -310,7 +313,7 @@ function highlightKeystrokeKey(code, active) {
 }
 const KEYSTROKE_KEYS = new Set([
     'keystroke overlay', 'keystroke overlay edit mode',
-    'keystroke overlay x', 'keystroke overlay y', 'keystroke overlay removed keys'
+    'keystroke overlay x', 'keystroke overlay y', 'keystroke overlay scale', 'keystroke overlay removed keys'
 ]);
 function reapplyKeystroke() {
     applyKeystrokeOverlay(
@@ -318,20 +321,23 @@ function reapplyKeystroke() {
         currentSettings['keystroke overlay edit mode'],
         currentSettings['keystroke overlay x'],
         currentSettings['keystroke overlay y'],
+        currentSettings['keystroke overlay scale'],
         currentSettings['keystroke overlay removed keys']
     );
 }
 function applyAllSettings(s) {
-    applyTheme(s['nameless theme']);
+    applyTheme(s['celeste theme']);
     applyCustomStyles(s['custom css list']);
     applyUIScaleAndOpacity(s['in-game ui opacity'], s['in-game ui scale']);
     applyGameChat(s['game chat']);
     applyGameCustomizations(s['custom hitmarker'], s['custom kill icon']);
     applyUIAnimations(s['ui animations']);
     applyTabInfo(s['show tab info']);
+    applySkipLoadingScreen(s['skip loading screen']);
     applyKeystrokeOverlay(
         s['keystroke overlay'], s['keystroke overlay edit mode'],
         s['keystroke overlay x'], s['keystroke overlay y'],
+        s['keystroke overlay scale'],
         s['keystroke overlay removed keys']
     );
 }
@@ -350,7 +356,7 @@ contextBridge.exposeInMainWorld('api', {
     },
     updateSetting: (key, value) => {
         currentSettings[key] = value;
-        if (key === 'nameless theme') applyTheme(currentSettings['nameless theme']);
+        if (key === 'celeste theme') applyTheme(currentSettings['celeste theme']);
         if (key === 'custom css list') applyCustomStyles(currentSettings['custom css list']);
         if (key === 'in-game ui opacity' || key === 'in-game ui scale')
             applyUIScaleAndOpacity(currentSettings['in-game ui opacity'], currentSettings['in-game ui scale']);
@@ -359,6 +365,7 @@ contextBridge.exposeInMainWorld('api', {
             applyGameCustomizations(currentSettings['custom hitmarker'], currentSettings['custom kill icon']);
         if (key === 'ui animations') applyUIAnimations(currentSettings['ui animations']);
         if (key === 'show tab info') applyTabInfo(currentSettings['show tab info']);
+        if (key === 'skip loading screen') applySkipLoadingScreen(currentSettings['skip loading screen']);
         if (KEYSTROKE_KEYS.has(key)) reapplyKeystroke();
         return ipcRenderer.invoke('update-setting', key, value);
     },
@@ -371,6 +378,7 @@ contextBridge.exposeInMainWorld('api', {
     actionDevtools: () => ipcRenderer.send('action-devtools'),
     actionQuickRestart: () => ipcRenderer.send('action-quick-restart'),
     actionZoom: dir => ipcRenderer.send('action-zoom', dir),
+    actionOpenSwapperFolder: () => ipcRenderer.send('action-open-swapper-folder'),
     buildCombo: (ctrlKey, shiftKey, altKey, code) => buildCombo({ ctrlKey, shiftKey, altKey, code })
 });
 window.addEventListener('DOMContentLoaded', async () => {

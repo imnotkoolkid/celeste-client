@@ -3,10 +3,24 @@ const path = require('path');
 const fs = require('fs');
 const { exec } = require('child_process');
 const GPU_SWITCHES = [
-    'disable-frame-rate-limit', 'ignore-gpu-blacklist',
-    'enable-gpu-rasterization', 'force_high_performance_gpu', 'enable-zero-copy',
-    ['enable-features', 'CanvasOopRasterization,UseSkiaRenderer'],
-    'disable-renderer-backgrounding', 'disable-background-timer-throttling'
+    'disable-frame-rate-limit',
+    'disable-gpu-vsync',
+    'ignore-gpu-blacklist',     
+    'ignore-gpu-blocklist',      
+    'force-high-performance-gpu', 
+    'enable-gpu-rasterization',
+    'enable-zero-copy',
+
+    ['enable-features', 'CanvasOopRasterization,UseSkiaRenderer,VaapiVideoDecodeLinuxGL'],
+
+    ['enable-hardware-overlays', 'single-fullscreen,single-on-top,underlay'],
+
+    ['use-gl', 'angle'],
+
+    'disable-renderer-backgrounding',
+    'disable-background-timer-throttling',
+
+    ['num-raster-threads', require('os').cpus().length.toString()],
 ];
 class SettingsManager {
     constructor() {

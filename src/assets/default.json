@@ -1,8 +1,10 @@
 {
   "unlimited fps": true,
   "start fullscreen": true,
+  "swapper enabled": true,
   "zoom level": 0,
-  "nameless theme": true,
+  "skip loading screen": false,
+  "celeste theme": true,
   "custom css mode": "url",
   "custom css code": "",
   "custom css url": "",
@@ -19,6 +21,7 @@
   "keystroke overlay edit mode": false,
   "keystroke overlay x": 0,
   "keystroke overlay y": 0,
+  "keystroke overlay scale": 100,
   "keystroke overlay removed keys": [],
   "keybinds": {
     "toggle menu": "ShiftRight",

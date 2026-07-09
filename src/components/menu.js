@@ -34,13 +34,15 @@ window.api.getSettings().then(settings => {
         const togglePairs = [
             ['toggle-unlimited-fps', 'unlimited fps'],
             ['toggle-start-fullscreen', 'start fullscreen'],
-            ['toggle-nameless-theme', 'nameless theme'],
+            ['toggle-celeste-theme', 'celeste theme'],
             ['toggle-show-rpc', 'show rpc'],
             ['toggle-rpc-match-info', 'rpc match info'],
             ['toggle-ui-animations', 'ui animations'],
             ['toggle-keystroke-overlay', 'keystroke overlay'],
             ['toggle-keystroke-edit', 'keystroke overlay edit mode'],
             ['toggle-show-tab-info', 'show tab info'],
+            ['toggle-skip-loading-screen', 'skip loading screen'],
+            ['toggle-swapper-enabled', 'swapper enabled'],
         ];
         for (const [id, key] of togglePairs) {
             const el = $(id);
@@ -63,6 +65,7 @@ window.api.getSettings().then(settings => {
         const sliderPairs = [
             ['input-ui-opacity', 'val-ui-opacity', 'in-game ui opacity'],
             ['input-ui-scale', 'val-ui-scale', 'in-game ui scale'],
+            ['input-keystroke-scale', 'val-keystroke-scale', 'keystroke overlay scale'],
         ];
         for (const [iId, vId, key] of sliderPairs) {
             const input = $(iId), valEl = $(vId);
@@ -79,6 +82,12 @@ window.api.getSettings().then(settings => {
             const el = $(id);
             if (el) el.value = s[key] ?? 0;
         }
+        const scaleEl = $('input-keystroke-scale'), scaleValEl = $('val-keystroke-scale');
+        if (scaleEl && scaleValEl) {
+            scaleEl.value = s['keystroke overlay scale'] ?? 100;
+            scaleValEl.textContent = scaleEl.value;
+            updateSliderBg(scaleEl);
+        }
         root.querySelectorAll('.hotkey-value').forEach(el => {
             const key = el.dataset.keybind;
             if (key && s.keybinds?.[key]) el.textContent = s.keybinds[key].replace(/Key|Digit/g, '');
@@ -90,19 +99,22 @@ window.api.getSettings().then(settings => {
     [
         ['toggle-unlimited-fps', 'unlimited fps'],
         ['toggle-start-fullscreen', 'start fullscreen'],
-        ['toggle-nameless-theme', 'nameless theme'],
+        ['toggle-celeste-theme', 'celeste theme'],
         ['toggle-show-rpc', 'show rpc'],
         ['toggle-rpc-match-info', 'rpc match info'],
         ['toggle-ui-animations', 'ui animations'],
         ['toggle-keystroke-overlay', 'keystroke overlay'],
         ['toggle-keystroke-edit', 'keystroke overlay edit mode'],
         ['toggle-show-tab-info', 'show tab info'],
+        ['toggle-skip-loading-screen', 'skip loading screen'],
+        ['toggle-swapper-enabled', 'swapper enabled'],
     ].forEach(([id, key]) => bindToggle(id, key));
+    $('btn-open-swapper-folder')?.addEventListener('click', () => window.api.actionOpenSwapperFolder());
     const bindInput = (id, key) =>
         $(id)?.addEventListener('input', e => window.api.updateSetting(key, e.target.value));
     bindInput('input-hitmarker', 'custom hitmarker');
     bindInput('input-killicon', 'custom kill icon');
-    const themeToggle = $('toggle-nameless-theme');
+    const themeToggle = $('toggle-celeste-theme');
     const bindButtonGroup = (groupId, onSelect) => {
         const group = $(groupId);
         if (!group) return;
@@ -125,6 +137,7 @@ window.api.getSettings().then(settings => {
     };
     bindSlider('input-ui-opacity', 'val-ui-opacity', 'in-game ui opacity');
     bindSlider('input-ui-scale', 'val-ui-scale', 'in-game ui scale');
+    bindSlider('input-keystroke-scale', 'val-keystroke-scale', 'keystroke overlay scale');
     const sanitizeInt = val => {
         const neg = val.startsWith('-');
         return (neg ? '-' : '') + val.replace(/[^0-9]/g, '');

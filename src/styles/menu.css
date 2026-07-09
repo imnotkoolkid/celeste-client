@@ -262,8 +262,9 @@ input[type=range]:focus { outline: none; }
 .btn-box:hover { background-color: var(--bg3); color: var(--txt2); }
 .btn-box.active { background-color: var(--accent); color: #ffffff; }
 
-#btn-reset-settings {
-  background: var(--accent2);
+#btn-reset-settings,
+.menu-action-btn {
+  background: var(--accent);
   color: white;
   border: none; outline: none;
   padding: 6px 16px;
@@ -272,8 +273,10 @@ input[type=range]:focus { outline: none; }
   font-size: 0.85rem;
   font-weight: bold;
   font-family: inherit;
+  text-transform: uppercase;
   transition: background 0.2s ease, transform 0.1s ease;
 }
+#btn-reset-settings { background: var(--accent2); }
 
 #btn-reset-settings:hover { background: var(--accent2); }
 #btn-reset-settings.undo-mode { background: var(--accent3); }

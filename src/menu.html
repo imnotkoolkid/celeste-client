@@ -54,12 +54,17 @@
           <label class="toggle-switch"><input type="checkbox" id="toggle-show-tab-info"><span
               class="slider"></span></label>
         </div>
+        <div class="setting-item">
+          <span class="setting-label">Skip Loading Screen</span>
+          <label class="toggle-switch"><input type="checkbox" id="toggle-skip-loading-screen"><span
+              class="slider"></span></label>
+        </div>
 
         <div class="setting-category">
           <div class="category-header">Theme</div>
           <div class="setting-item sub-item">
-            <span class="setting-label">Nameless Theme</span>
-            <label class="toggle-switch"><input type="checkbox" id="toggle-nameless-theme" checked><span
+            <span class="setting-label">Celeste Theme</span>
+            <label class="toggle-switch"><input type="checkbox" id="toggle-celeste-theme" checked><span
                 class="slider"></span></label>
           </div>
         </div>
@@ -131,6 +136,13 @@
           <div class="setting-item sub-item">
             <span class="setting-label">Keystroke Overlay Y Offset (px)</span>
             <input type="text" class="setting-input num-input" id="input-keystroke-y" value="0">
+          </div>
+          <div class="setting-item sub-item">
+            <span class="setting-label">Keystroke Overlay Scale (%)</span>
+            <div class="slider-container">
+              <input type="range" id="input-keystroke-scale" min="25" max="200" value="100">
+              <span class="slider-value" id="val-keystroke-scale">100</span>
+            </div>
           </div>
         </div>
       </div>
@@ -250,6 +262,20 @@
           </div>
           <div id="plugin-manage-script-content" class="plugin-dropdown-content">
             <div id="manage-scripts-list" style="display: flex; flex-direction: column;"></div>
+          </div>
+        </div>
+        <div class="setting-category">
+          <div class="category-header">Swapper</div>
+          <div class="setting-item sub-item">
+            <div class="setting-label-container">
+              <span class="setting-label">Enable Swapper</span>
+              <span class="setting-label-sub">Requires Restart</span>
+            </div>
+            <label class="toggle-switch"><input type="checkbox" id="toggle-swapper-enabled"><span class="slider"></span></label>
+          </div>
+          <div class="setting-item sub-item">
+            <span class="setting-label">Open Swapper Folder</span>
+            <button id="btn-open-swapper-folder" class="menu-action-btn">Open Folder</button>
           </div>
         </div>
       </div>
