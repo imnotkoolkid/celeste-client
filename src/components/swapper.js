@@ -3,11 +3,12 @@
 const { app, session, protocol } = require('electron');
 const path = require('path');
 const fs   = require('fs');
+const fsp  = fs.promises;
 
 const getSwapperFolder = () =>
     path.join(app.getPath('documents'), 'CelesteClient', 'swapper', 'assets');
 
-const initResourceSwapper = (enabled) => {
+const initResourceSwapper = async (enabled) => {
     protocol.registerFileProtocol('celeste', (request, callback) => {
         let p = request.url.replace(/^celeste:\/\//i, '');
         if (p.startsWith('/')) p = p.slice(1);
@@ -17,17 +18,8 @@ const initResourceSwapper = (enabled) => {
         callback({ path: decodeURIComponent(p) });
     });
 
-    try {
-        protocol.registerFileProtocol('file', (request, callback) => {
-            let p = request.url.replace(/^file:\/\/\//i, '');
-            if (process.platform === 'win32' && p.startsWith('/')) p = p.slice(1);
-            callback(decodeURIComponent(p));
-        });
-    } catch (_) {}
-
     const SWAP_FOLDER = path.join(app.getPath('documents'), 'CelesteClient', 'swapper');
     const subFolders  = ['media', 'img'];
-    const swapFiles   = {};
 
     subFolders.forEach(folder => {
         const dir = path.join(SWAP_FOLDER, 'assets', folder);
@@ -36,22 +28,34 @@ const initResourceSwapper = (enabled) => {
 
     if (!enabled) return;
 
-    const allFilesSync = (dir) => {
-        if (!fs.existsSync(dir)) return;
-        fs.readdirSync(dir).forEach(file => {
-            const filePath = path.join(dir, file);
-            if (fs.statSync(filePath).isDirectory()) {
-                allFilesSync(filePath);
-            } else {
-                const relPath = path.relative(SWAP_FOLDER, filePath).replace(/\\/g, '/');
-                if (!relPath.startsWith('assets/media/') && !relPath.startsWith('assets/img/')) return;
-                const cleanedKey = `://kirka.io/${relPath}`.replace(/\_/g, '');
-                swapFiles[cleanedKey] = filePath.replace(/\\/g, '/');
-            }
+    try {
+        protocol.registerFileProtocol('file', (request, callback) => {
+            let p = request.url.replace(/^file:\/\/\//i, '');
+            if (process.platform === 'win32' && p.startsWith('/')) p = p.slice(1);
+            callback(decodeURIComponent(p));
         });
-    };
+    } catch (_) {}
 
-    allFilesSync(SWAP_FOLDER);
+    const swapFiles = {};
+
+    async function collectSwapFiles(dir) {
+        let entries;
+        try {
+            entries = await fsp.readdir(dir, { withFileTypes: true });
+        } catch (_) {
+            return;
+        }
+        await Promise.all(entries.map(async entry => {
+            const filePath = path.join(dir, entry.name);
+            if (entry.isDirectory()) return collectSwapFiles(filePath);
+            const relPath = path.relative(SWAP_FOLDER, filePath).replace(/\\/g, '/');
+            if (!relPath.startsWith('assets/media/') && !relPath.startsWith('assets/img/')) return;
+            const cleanedKey = `://kirka.io/${relPath}`.replace(/_/g, '');
+            swapFiles[cleanedKey] = filePath.replace(/\\/g, '/');
+        }));
+    }
+
+    await collectSwapFiles(SWAP_FOLDER);
 
     session.defaultSession.webRequest.onBeforeRequest(
         { urls: ['*://kirka.io/*', '*://*.kirka.io/*'] },

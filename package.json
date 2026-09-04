@@ -11,6 +11,7 @@
     "url": "https://github.com/imnotkoolkid/celeste-client"
   },
   "scripts": {
+    "postinstall": "node patches/postinstall-patch.js",
     "start": "electron .",
     "build": "electron-builder"
   },
@@ -22,5 +23,8 @@
     "electron": "^10.4.7",
     "electron-builder": "^26.0.12",
     "rcedit": "^5.0.2"
+  },
+  "allowScripts": {
+    "electron@10.4.7": true
   }
 }

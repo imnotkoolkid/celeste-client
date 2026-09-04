@@ -1,12 +1,22 @@
 const { app, BrowserWindow, Menu, ipcMain, net, protocol, shell } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('path');
+const os   = require('os');
 const settingsManager          = require('./components/settingsManager');
 const drpc                     = require('./components/drpc');
 const { initResourceSwapper, getSwapperFolder } = require('./components/swapper');
+
 app.setName('Celeste Client');
 app.setAppUserModelId('dev.imnotkoolkid.celesteclient');
+
+app.commandLine.appendSwitch('ignore-gpu-blacklist');
+app.commandLine.appendSwitch('disable-renderer-backgrounding');
+app.commandLine.appendSwitch('disable-background-timer-throttling');
+app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
+app.commandLine.appendSwitch('disable-ipc-flooding-protection');
+app.commandLine.appendSwitch('force-color-profile', 'srgb');
 app.commandLine.appendSwitch('js-flags', '--max-old-space-size=4096 --turbo-fast-api-calls --future');
+
 protocol.registerSchemesAsPrivileged([
   { scheme: 'celeste', privileges: { secure: true, standard: true, supportFetchAPI: true, corsEnabled: true } }
 ]);
@@ -17,11 +27,21 @@ let mainWindow;
 let splashWindow;
 let _updateDownloaded = false;
 
+function boostProcessPriorities() {
+  try {
+    const metrics = app.getAppMetrics();
+    for (const proc of metrics) {
+      if (proc.type === 'GPU' || proc.type === 'Tab' || proc.type === 'Renderer') {
+        try { os.setPriority(proc.pid, os.constants.priority.PRIORITY_HIGH); } catch (_) {}
+      }
+    }
+  } catch (_) {}
+}
 
 function configureUpdater() {
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
-  autoUpdater.logger = null; 
+  autoUpdater.logger = null;
 
   autoUpdater.on('update-downloaded', () => {
     _updateDownloaded = true;
@@ -30,7 +50,6 @@ function configureUpdater() {
 
   autoUpdater.on('error', () => {});
 }
-
 
 function splashProgress(step) {
   if (!splashWindow || splashWindow.isDestroyed()) return;
@@ -60,14 +79,14 @@ function createSplash() {
     },
   });
   splashWindow.loadFile(path.join(__dirname, 'assets', 'html', 'loading.html'));
-  
+
   let fakeStep = 1;
   let progressTimer = null;
 
   splashWindow.once('ready-to-show', () => {
     splashWindow.show();
     splashProgress(fakeStep);
-    
+
     progressTimer = setInterval(() => {
       if (!splashWindow || splashWindow.isDestroyed()) {
         clearInterval(progressTimer);
@@ -108,24 +127,19 @@ function createWindow() {
       sandbox: false,
       preload: path.join(__dirname, 'preload.js'),
       backgroundThrottling: false,
-      spellcheck: false
+      spellcheck: false,
     }
   });
   Menu.setApplicationMenu(null);
   mainWindow.on('page-title-updated', e => e.preventDefault());
 
-  ipcMain.once('loading-done',   () => {
+  ipcMain.once('loading-done', () => {
     if (!settingsManager.get('start fullscreen')) mainWindow.maximize();
     mainWindow.show();
     closeSplash();
   });
 
-  mainWindow.webContents.once('did-finish-load', () => {
-    mainWindow.webContents.setZoomLevel(settingsManager.get('zoom level') || 0);
-  });
-
   mainWindow.once('ready-to-show', () => {
-
     if (splashWindow && !splashWindow.isDestroyed()) {
       if (!settingsManager.get('start fullscreen')) mainWindow.maximize();
       mainWindow.show();
@@ -139,30 +153,28 @@ function createWindow() {
   mainWindow.webContents.on('did-navigate-in-page', onNavigate);
   mainWindow.webContents.on('did-finish-load', () => {
     mainWindow.webContents.setZoomLevel(settingsManager.get('zoom level') || 0);
+    boostProcessPriorities();
   });
   mainWindow.on('closed', () => { mainWindow = null; });
 }
 
-app.whenReady().then(() => {
-  const os = require('os');
-  try {
-    os.setPriority(os.constants.priority.PRIORITY_HIGH);
-  } catch (e) {
-    console.error('Failed to set process priority:', e);
-  }
+app.whenReady().then(async () => {
+  try { os.setPriority(os.constants.priority.PRIORITY_HIGH); } catch (_) {}
 
-  initResourceSwapper(settingsManager.get('swapper enabled') !== false);
+  await initResourceSwapper(settingsManager.get('swapper enabled') !== false);
 
   createSplash();
 
   configureUpdater();
   if (app.isPackaged) {
-    autoUpdater.checkForUpdates().catch(() => {}).finally(() => {
-      if (!_updateDownloaded) createWindow();
-    });
+    const updateCheck = autoUpdater.checkForUpdates().catch(() => {});
+    await Promise.race([updateCheck, new Promise(r => setTimeout(r, 5000))]);
+    if (!_updateDownloaded) createWindow();
   } else {
     createWindow();
   }
+
+  boostProcessPriorities();
 
   const fs = require('fs');
   const MAX_CACHE = 256;
