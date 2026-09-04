@@ -4,22 +4,18 @@ const path = require('path');
 
 
 try {
-    const __gpuPatch = document.createElement('script');
-    __gpuPatch.textContent = `(function(){
-        if (window.__celesteGpuPatched) return;
+    if (!window.__celesteGpuPatched) {
         window.__celesteGpuPatched = true;
-        var _orig = HTMLCanvasElement.prototype.getContext;
-        HTMLCanvasElement.prototype.getContext = function(type, attrs) {
+        const _orig = HTMLCanvasElement.prototype.getContext;
+        HTMLCanvasElement.prototype.getContext = function (type, attrs) {
             if (type === 'webgl' || type === 'webgl2' || type === 'experimental-webgl') {
                 attrs = Object.assign({}, attrs || {});
                 attrs.powerPreference = 'high-performance';
-                attrs.desynchronized = true; 
+                attrs.desynchronized = true;
             }
             return _orig.call(this, type, attrs);
         };
-    })();`;
-    document.documentElement.appendChild(__gpuPatch);
-    __gpuPatch.remove();
+    }
 } catch (_) {}
 
 

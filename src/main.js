@@ -15,7 +15,7 @@ app.commandLine.appendSwitch('disable-background-timer-throttling');
 app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
 app.commandLine.appendSwitch('disable-ipc-flooding-protection');
 app.commandLine.appendSwitch('force-color-profile', 'srgb');
-app.commandLine.appendSwitch('js-flags', '--max-old-space-size=4096 --turbo-fast-api-calls --future');
+app.commandLine.appendSwitch('js-flags', '--max-old-space-size=4096 --turbo-fast-api-calls');
 app.commandLine.appendSwitch('use-gl', 'angle');
 if (process.platform === 'win32') {
   app.commandLine.appendSwitch('use-angle', 'd3d11');
@@ -26,6 +26,8 @@ protocol.registerSchemesAsPrivileged([
 ]);
 settingsManager.init();
 drpc.init(settingsManager.settings);
+
+app.on('render-process-created', () => boostProcessPriorities());
 
 let mainWindow;
 let splashWindow;
@@ -157,7 +159,6 @@ function createWindow() {
   mainWindow.webContents.on('did-navigate-in-page', onNavigate);
   mainWindow.webContents.on('did-finish-load', () => {
     mainWindow.webContents.setZoomLevel(settingsManager.get('zoom level') || 0);
-    boostProcessPriorities();
   });
   mainWindow.on('closed', () => { mainWindow = null; });
 }

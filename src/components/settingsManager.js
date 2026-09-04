@@ -2,26 +2,23 @@ const { app, ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { exec } = require('child_process');
-const GPU_SWITCHES = [
-    'disable-frame-rate-limit',
-    'disable-gpu-vsync',
-    'ignore-gpu-blacklist',     
-    'ignore-gpu-blocklist',      
-    'force-high-performance-gpu', 
+
+const ALWAYS_SAFE_GPU_SWITCHES = [
+    'ignore-gpu-blacklist',
+    'ignore-gpu-blocklist',
+    'force-high-performance-gpu',
     'enable-gpu-rasterization',
     'enable-zero-copy',
-
     ['enable-features', 'CanvasOopRasterization,UseSkiaRenderer,VaapiVideoDecodeLinuxGL'],
-
     ['enable-hardware-overlays', 'single-fullscreen,single-on-top,underlay'],
-
-    ['use-gl', 'angle'],
-
-    'disable-renderer-backgrounding',
-    'disable-background-timer-throttling',
-
     ['num-raster-threads', require('os').cpus().length.toString()],
 ];
+
+const UNCAP_FPS_SWITCHES = [
+    'disable-frame-rate-limit',
+    'disable-gpu-vsync',
+];
+
 class SettingsManager {
     constructor() {
         this.settingsPath = path.join(app.getPath('userData'), 'settings.json');
@@ -61,20 +58,27 @@ class SettingsManager {
                 : { 'unlimited fps': true, 'start fullscreen': true };
             this.scheduleSave();
         }
+
+        if (app.isReady()) console.warn('SettingsManager.init() called after app is ready! GPU switches ignored.');
+
+        for (const sw of ALWAYS_SAFE_GPU_SWITCHES) {
+            Array.isArray(sw) ? app.commandLine.appendSwitch(...sw) : app.commandLine.appendSwitch(sw);
+        }
+
+
+        if (process.platform === 'win32') {
+            exec(
+                `reg add "HKCU\\Software\\Microsoft\\DirectX\\UserGpuPreferences" /v "${process.execPath}" /t REG_SZ /d "GpuPreference=2;" /f`,
+                err => { if (err) console.error('Failed to set high performance GPU preference:', err); }
+            );
+        }
+
         if (this.settings['unlimited fps']) {
-            if (app.isReady()) console.warn('SettingsManager.init() called after app is ready! GPU switches ignored.');
-            for (const sw of GPU_SWITCHES) {
+            for (const sw of UNCAP_FPS_SWITCHES) {
                 Array.isArray(sw) ? app.commandLine.appendSwitch(...sw) : app.commandLine.appendSwitch(sw);
             }
-            if (process.platform === 'win32') {
-                exec(
-                    `reg add "HKCU\\Software\\Microsoft\\DirectX\\UserGpuPreferences" /v "${process.execPath}" /t REG_SZ /d "GpuPreference=2;" /f`,
-                    err => { if (err) console.error('Failed to set high performance GPU preference:', err); }
-                );
-            }
-        } else if (process.platform === 'win32') {
-            exec(`reg delete "HKCU\\Software\\Microsoft\\DirectX\\UserGpuPreferences" /v "${process.execPath}" /f`, () => { });
         }
+
         ipcMain.removeHandler('get-settings');
         ipcMain.handle('get-settings', () => this.settings);
         ipcMain.removeHandler('update-setting');
