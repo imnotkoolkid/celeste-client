@@ -16,6 +16,10 @@ app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
 app.commandLine.appendSwitch('disable-ipc-flooding-protection');
 app.commandLine.appendSwitch('force-color-profile', 'srgb');
 app.commandLine.appendSwitch('js-flags', '--max-old-space-size=4096 --turbo-fast-api-calls --future');
+app.commandLine.appendSwitch('use-gl', 'angle');
+if (process.platform === 'win32') {
+  app.commandLine.appendSwitch('use-angle', 'd3d11');
+}
 
 protocol.registerSchemesAsPrivileged([
   { scheme: 'celeste', privileges: { secure: true, standard: true, supportFetchAPI: true, corsEnabled: true } }
