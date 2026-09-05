@@ -3,32 +3,45 @@ name: Build and Release
 on:
   workflow_dispatch:
 
-permissions:
-  contents: write
-
 jobs:
   build:
+    runs-on: ${{ matrix.os }}
+
+    permissions:
+      contents: write
+
     strategy:
       matrix:
-        os: [windows-latest, ubuntu-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
-    
+        os: [macos-15-intel, windows-latest, ubuntu-latest]
+        include:
+          - os: windows-latest
+            arch: x64
+            build_command: npx electron-builder --windows --x64 --publish always "-c.publish.repo=celeste-client"
+          - os: macos-15-intel
+            arch: x64
+            build_command: npx electron-builder --mac dmg --x64 --publish always "-c.publish.repo=celeste-client"
+          - os: ubuntu-latest
+            arch: x64
+            build_command: npx electron-builder --linux --x64 --publish always "-c.publish.repo=celeste-client"
+
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v3
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
-          node-version: 16
+          node-version: '20.x'
 
-      - name: Install dependencies
+      - name: Install Dependencies
         run: npm install
         env:
           npm_config_arch: x64
 
-      - name: Build and Publish Draft Release
-        run: npm run build -- --publish always --x64
+      - name: Build and Publish Electron App
+        run: ${{ matrix.build_command }}
         env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EP_DRAFT: true
           CSC_IDENTITY_AUTO_DISCOVERY: false
