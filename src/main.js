@@ -232,9 +232,24 @@ app.whenReady().then(async () => {
     const win = BrowserWindow.fromWebContents(e.sender);
     if (win) win.setFullScreen(!win.isFullScreen());
   });
+  let devtools = undefined;
   ipcMain.on('action-devtools', e => {
     const win = BrowserWindow.fromWebContents(e.sender);
-    if (win) win.webContents.toggleDevTools();
+    if (!win) return;
+    if (process.platform !== 'linux') {
+      win.webContents.toggleDevTools();
+    } else {
+      // Workaround for Linux DevTools issue in older Electron versions.
+      // See: https://stackoverflow.com/questions/69969658/electron-devtools-inspector-not-showing-on-linux
+      // See: https://stackoverflow.com/questions/73287303/electron-dev-tools-dont-show#comment137301808_73336044
+      if (!devtools || devtools.isDestroyed()) {
+        devtools = new BrowserWindow({ parent: win, width: 800, height: 600 });
+        win.webContents.setDevToolsWebContents(devtools.webContents);
+        win.webContents.openDevTools({ mode: 'detach' });
+      } else {
+        devtools.close();
+      }
+    }
   });
   ipcMain.on('action-open-swapper-folder', () => {
     const folder = getSwapperFolder();
