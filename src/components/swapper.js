@@ -18,8 +18,6 @@ const initResourceSwapper = async (enabled) => {
         }
         callback({ path: decodeURIComponent(p) });
     });
-
-    const SWAP_FOLDER = path.join(app.getPath('documents'), 'CelesteClient', 'swapper');
     const subFolders  = ['media', 'img'];
 
     subFolders.forEach(folder => {
@@ -57,13 +55,12 @@ const initResourceSwapper = async (enabled) => {
     }
 
     await collectSwapFiles(SWAP_FOLDER);
-    const hasSwapFiles = Object.keys(swapFiles).length > 0;
 
     session.defaultSession.webRequest.onBeforeRequest(
         { urls: ['*://kirka.io/*', '*://*.kirka.io/*'], types: ['image', 'media'] },
         (details, callback) => {
-            if (!hasSwapFiles) return callback({}); 
-            const cleanedUrl = details.url.replace(/https|http|(\?.*)|(\#.*)|\_/gi, '');
+            if (Object.keys(swapFiles).length === 0) return callback({}); 
+            const cleanedUrl = details.url.replace(/^https?|(\?.*)|(\#.*)|\_/gi, '');
             const localFile  = swapFiles[cleanedUrl];
             callback(localFile ? { redirectURL: localFile } : {});
         }

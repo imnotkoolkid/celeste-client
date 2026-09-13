@@ -139,17 +139,20 @@ function createWindow() {
   Menu.setApplicationMenu(null);
   mainWindow.on('page-title-updated', e => e.preventDefault());
 
-  ipcMain.once('loading-done', () => {
+  let isWindowShown = false;
+  const showMainWindow = () => {
+    if (isWindowShown) return;
+    isWindowShown = true;
     if (!settingsManager.get('start fullscreen')) mainWindow.maximize();
     mainWindow.show();
     closeSplash();
-  });
+  };
+
+  ipcMain.once('loading-done', showMainWindow);
 
   mainWindow.once('ready-to-show', () => {
     if (splashWindow && !splashWindow.isDestroyed()) {
-      if (!settingsManager.get('start fullscreen')) mainWindow.maximize();
-      mainWindow.show();
-      closeSplash();
+      showMainWindow();
     }
   });
 
