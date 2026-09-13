@@ -31,13 +31,13 @@ const initResourceSwapper = async (enabled) => {
 
     if (!enabled) return;
 
-    try {
-        protocol.registerFileProtocol('file', (request, callback) => {
-            let p = request.url.slice('file:///'.length);
-            if (process.platform === 'win32' && p.startsWith('/')) p = p.slice(1);
-            callback(decodeURIComponent(p));
-        });
-    } catch (_) {}
+    // try {
+    //     protocol.registerFileProtocol('file', (request, callback) => {
+    //         let p = request.url.slice('file:///'.length);
+    //         if (process.platform === 'win32' && p.startsWith('/')) p = p.slice(1);
+    //         callback(decodeURIComponent(p));
+    //     });
+    // } catch (_) {}
 
     async function collectSwapFiles(dir) {
         let entries;
