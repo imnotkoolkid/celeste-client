@@ -81,7 +81,7 @@ function createSplash() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      sandbox: true,
+      sandbox: process.platform !== 'linux',
     },
   });
   splashWindow.loadFile(path.join(__dirname, 'assets', 'html', 'loading.html'));
