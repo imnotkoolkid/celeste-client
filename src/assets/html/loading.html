@@ -36,6 +36,10 @@
 <body>
 <div id="celeste"></div>
 <script>
+  // Use a black background on Linux to work around transparent window issues.
+  // See: https://github.com/electron/electron/issues/15947
+  if (navigator.platform.startsWith("Linux")) document.body.style.background = "#000000";
+
   const WORD = "CELESTE";
   const CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789#@!&%$?";
   const container = document.getElementById("celeste");
