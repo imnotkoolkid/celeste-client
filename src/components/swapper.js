@@ -10,8 +10,12 @@ const swapperFolder = path.join(SWAP_FOLDER, 'assets');
 const getSwapperFolder = () => swapperFolder;
 
 const initResourceSwapper = async (enabled) => {
+    const swapFiles = {};
+
     protocol.registerFileProtocol('celeste', (request, callback) => {
-        let p = request.url.slice('celeste://'.length);
+        const cleanedUrl = request.url.slice('celeste://'.length);
+        let p = swapFiles[cleanedUrl];
+        if (!p) return callback({});
         if (p.startsWith('/')) p = p.slice(1);
         if (process.platform === 'win32' && /^[a-zA-Z]\//.test(p)) {
             p = p.charAt(0) + ':' + p.slice(1);
@@ -27,15 +31,13 @@ const initResourceSwapper = async (enabled) => {
 
     if (!enabled) return;
 
-    try {
-        protocol.registerFileProtocol('file', (request, callback) => {
-            let p = request.url.slice('file:///'.length);
-            if (process.platform === 'win32' && p.startsWith('/')) p = p.slice(1);
-            callback(decodeURIComponent(p));
-        });
-    } catch (_) {}
-
-    const swapFiles = {};
+    // try {
+    //     protocol.registerFileProtocol('file', (request, callback) => {
+    //         let p = request.url.slice('file:///'.length);
+    //         if (process.platform === 'win32' && p.startsWith('/')) p = p.slice(1);
+    //         callback(decodeURIComponent(p));
+    //     });
+    // } catch (_) {}
 
     async function collectSwapFiles(dir) {
         let entries;
@@ -50,7 +52,7 @@ const initResourceSwapper = async (enabled) => {
             const relPath = path.relative(SWAP_FOLDER, filePath).replace(/\\/g, '/');
             if (!relPath.startsWith('assets/media/') && !relPath.startsWith('assets/img/')) return;
             const cleanedKey = `://kirka.io/${relPath}`.replace(/_/g, '');
-            swapFiles[cleanedKey] = 'celeste://' + filePath.replace(/\\/g, '/');
+            swapFiles[cleanedKey] = filePath.replace(/\\/g, '/');
         }));
     }
 
@@ -61,8 +63,7 @@ const initResourceSwapper = async (enabled) => {
         (details, callback) => {
             if (Object.keys(swapFiles).length === 0) return callback({}); 
             const cleanedUrl = details.url.replace(/^https?|(\?.*)|(\#.*)|\_/gi, '');
-            const localFile  = swapFiles[cleanedUrl];
-            callback(localFile ? { redirectURL: localFile } : {});
+            callback(cleanedUrl in swapFiles ? { redirectURL: 'celeste://' + cleanedUrl } : {});
         }
     );
 };
