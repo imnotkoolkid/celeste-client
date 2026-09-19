@@ -58,10 +58,15 @@ const initResourceSwapper = async (enabled) => {
 
     await collectSwapFiles(SWAP_FOLDER);
 
+    function emptySwapFiles() {
+        for (const _ in swapFiles) return false;
+        return true;
+    }
+
     session.defaultSession.webRequest.onBeforeRequest(
         { urls: ['*://kirka.io/*', '*://*.kirka.io/*'], types: ['image', 'media'] },
         (details, callback) => {
-            if (Object.keys(swapFiles).length === 0) return callback({}); 
+            if (emptySwapFiles()) return callback({}); 
             const cleanedUrl = details.url.replace(/^https?|(\?.*)|(\#.*)|\_/gi, '');
             callback(cleanedUrl in swapFiles ? { redirectURL: 'celeste://' + cleanedUrl } : {});
         }
