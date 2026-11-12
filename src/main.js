@@ -156,9 +156,10 @@ function createWindow() {
     }
   });
   
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+
+  mainWindow.webContents.on('new-window', (event, url) => {
+    event.preventDefault();
     shell.openExternal(url);
-    return { action: 'deny' };
   });
 
   mainWindow.loadURL('https://kirka.io/');
