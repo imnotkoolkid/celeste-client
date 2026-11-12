@@ -31,6 +31,7 @@ class DRPC {
         this.state = '';
         this.currentFullUrl = null;
         this._lastActivityState = null;
+        this._interval = null;
     }
     init(settings) {
         this.settings = settings;
@@ -41,7 +42,12 @@ class DRPC {
             console.log('Discord RPC failed to connect:', err.message);
             this.connected = false;
         });
-        setInterval(() => { if (this.connected) this.setActivity(); }, 15000);
+        this._interval = setInterval(() => { if (this.connected) this.setActivity(); }, 15000);
+    }
+    destroy() {
+        if (this._interval) { clearInterval(this._interval); this._interval = null; }
+        this.connected = false;
+        this.client.destroy().catch(() => {});
     }
     setActivity() {
         if (!this.connected) return;

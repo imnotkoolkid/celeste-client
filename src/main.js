@@ -9,13 +9,13 @@ const { initResourceSwapper, getSwapperFolder } = require('./components/swapper'
 app.setName('Celeste Client');
 app.setAppUserModelId('dev.imnotkoolkid.celesteclient');
 
-app.commandLine.appendSwitch('ignore-gpu-blacklist');
+app.commandLine.appendSwitch('ignore-gpu-blocklist');
 app.commandLine.appendSwitch('disable-renderer-backgrounding');
 app.commandLine.appendSwitch('disable-background-timer-throttling');
 app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
 app.commandLine.appendSwitch('disable-ipc-flooding-protection');
 app.commandLine.appendSwitch('force-color-profile', 'srgb');
-app.commandLine.appendSwitch('js-flags', '--max-old-space-size=4096 --turbo-fast-api-calls');
+app.commandLine.appendSwitch('js-flags', '--max-old-space-size=4096');
 app.commandLine.appendSwitch('use-gl', 'angle');
 if (process.platform === 'win32') {
   app.commandLine.appendSwitch('use-angle', 'd3d11');
@@ -27,7 +27,6 @@ protocol.registerSchemesAsPrivileged([
 settingsManager.init();
 drpc.init(settingsManager.settings);
 
-app.on('render-process-created', () => boostProcessPriorities());
 
 let mainWindow;
 let splashWindow;
@@ -157,9 +156,9 @@ function createWindow() {
   });
   
 
-  mainWindow.webContents.on('new-window', (event, url) => {
-    event.preventDefault();
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url);
+    return { action: 'deny' };
   });
 
   mainWindow.loadURL('https://kirka.io/');
@@ -209,29 +208,20 @@ app.whenReady().then(async () => {
     }
   }
   const resourceCache = new LRUCache(MAX_CACHE);
-  ipcMain.handle('fetch-resource', (_, url) => new Promise(resolve => {
-    if (resourceCache.has(url)) return resolve(resourceCache.get(url));
-    if (!url.startsWith('http://') && !url.startsWith('https://')) {
-      return resolve('');
-    }
+  ipcMain.handle('fetch-resource', async (_, url) => {
+    if (resourceCache.has(url)) return resourceCache.get(url);
+    if (!url.startsWith('http://') && !url.startsWith('https://')) return '';
     try {
-      const req = net.request(url);
-      const chunks = [];
-      req.on('response', res => {
-        res.on('data', chunk => chunks.push(chunk));
-        res.on('end', () => {
-          const body = Buffer.concat(chunks).toString('utf8');
-          resourceCache.set(url, body);
-          resolve(body);
-        });
-      });
-      req.on('error', err => { console.error('Fetch resource error:', err); resolve(''); });
-      req.end();
+      const res = await net.fetch(url);
+      if (!res.ok) return '';
+      const body = await res.text();
+      resourceCache.set(url, body);
+      return body;
     } catch (err) {
-      console.error('Fetch resource exception:', err);
-      resolve('');
+      console.error('Fetch resource error:', err);
+      return '';
     }
-  }));
+  });
   ipcMain.on('action-fullscreen', e => {
     const win = BrowserWindow.fromWebContents(e.sender);
     if (win) win.setFullScreen(!win.isFullScreen());
@@ -275,4 +265,5 @@ app.whenReady().then(async () => {
   });
 });
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
+app.on('before-quit', () => drpc.destroy());
 app.on('activate', () => { if (!mainWindow) createWindow(); });

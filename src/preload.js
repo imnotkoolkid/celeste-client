@@ -1,6 +1,11 @@
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webFrame } = require('electron');
 const fs = require('fs');
 const path = require('path');
+
+try {
+    const freezeFixCode = fs.readFileSync(path.join(__dirname, 'components', 'freezeBugFix.js'), 'utf8');
+    webFrame.executeJavaScript(freezeFixCode);
+} catch (_) {}
 
 
 try {

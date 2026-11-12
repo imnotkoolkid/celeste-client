@@ -23,3 +23,7 @@ To build the client for your current operating system, run:
 npm run build
 ```
 The compiled executable will be located in the `dist` folder.
+
+## Credits
+
+- [robertpakalns](https://github.com/robertpakalns) — rAF yield freeze bug fix (`src/components/freezeBugFix.js`), originally from [redline-client](https://github.com/robertpakalns/redline-client)

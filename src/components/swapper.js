@@ -1,6 +1,6 @@
 'use strict';
 
-const { app, session, protocol } = require('electron');
+const { app, session, protocol, net } = require('electron');
 const path = require('path');
 const fs   = require('fs');
 const fsp  = fs.promises;
@@ -12,32 +12,24 @@ const getSwapperFolder = () => swapperFolder;
 const initResourceSwapper = async (enabled) => {
     const swapFiles = {};
 
-    protocol.registerFileProtocol('celeste', (request, callback) => {
+    protocol.handle('celeste', (request) => {
         const cleanedUrl = request.url.slice('celeste://'.length);
         let p = swapFiles[cleanedUrl];
-        if (!p) return callback({});
+        if (!p) return new Response(null, { status: 404 });
         if (p.startsWith('/')) p = p.slice(1);
         if (process.platform === 'win32' && /^[a-zA-Z]\//.test(p)) {
             p = p.charAt(0) + ':' + p.slice(1);
         }
-        callback({ path: decodeURIComponent(p) });
+        return net.fetch('file:///' + decodeURIComponent(p));
     });
-    const subFolders  = ['media', 'img'];
 
+    const subFolders = ['media', 'img'];
     subFolders.forEach(folder => {
         const dir = path.join(SWAP_FOLDER, 'assets', folder);
         if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     });
 
     if (!enabled) return;
-
-    // try {
-    //     protocol.registerFileProtocol('file', (request, callback) => {
-    //         let p = request.url.slice('file:///'.length);
-    //         if (process.platform === 'win32' && p.startsWith('/')) p = p.slice(1);
-    //         callback(decodeURIComponent(p));
-    //     });
-    // } catch (_) {}
 
     async function collectSwapFiles(dir) {
         let entries;
@@ -58,15 +50,12 @@ const initResourceSwapper = async (enabled) => {
 
     await collectSwapFiles(SWAP_FOLDER);
 
-    function emptySwapFiles() {
-        for (const _ in swapFiles) return false;
-        return true;
-    }
+    const hasSwapFiles = () => Object.keys(swapFiles).length > 0;
 
     session.defaultSession.webRequest.onBeforeRequest(
         { urls: ['*://kirka.io/*', '*://*.kirka.io/*'], types: ['image', 'media'] },
         (details, callback) => {
-            if (emptySwapFiles()) return callback({}); 
+            if (!hasSwapFiles()) return callback({});
             const cleanedUrl = details.url.replace(/^https?|(\?.*)|(\#.*)|\_/gi, '');
             callback(cleanedUrl in swapFiles ? { redirectURL: 'celeste://' + cleanedUrl } : {});
         }
