@@ -26,4 +26,4 @@ The compiled executable will be located in the `dist` folder.
 
 ## Credits
 
-- [robertpakalns](https://github.com/robertpakalns) — rAF yield freeze bug fix (`src/components/freezeBugFix.js`), originally from [redline-client](https://github.com/robertpakalns/redline-client)
+- [robertpakalns](https://github.com/robertpakalns) - rAF yield freeze bug fix (`src/components/freezeBugFix.js`), originally from [redline-client](https://github.com/robertpakalns/redline-client)
