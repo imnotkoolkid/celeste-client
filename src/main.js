@@ -206,12 +206,7 @@ app.whenReady().then(async () => {
   ipcMain.handle('fetch-resource', (_, url) => new Promise(resolve => {
     if (resourceCache.has(url)) return resolve(resourceCache.get(url));
     if (!url.startsWith('http://') && !url.startsWith('https://')) {
-      fs.readFile(url, 'utf8', (err, data) => {
-        const body = err ? '' : data;
-        resourceCache.set(url, body);
-        resolve(body);
-      });
-      return;
+      return resolve('');
     }
     try {
       const req = net.request(url);

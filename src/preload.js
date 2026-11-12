@@ -22,6 +22,9 @@ try {
 let currentSettings = {};
 const assetCache = new Map();
 let _fontBlobUrl = null;
+
+let _menuOpen = false;
+const _SENSITIVE_KEYS = new Set(['custom css list', 'custom scripts']);
 function getAssetSync(assetPath, encoding) {
     const key = `${assetPath}_${encoding || 'utf8'}`;
     if (assetCache.has(key)) return assetCache.get(key);
@@ -351,6 +354,7 @@ contextBridge.exposeInMainWorld('api', {
         }
     },
     updateSetting: (key, value) => {
+        if (_SENSITIVE_KEYS.has(key) && !_menuOpen) return Promise.resolve();
         currentSettings[key] = value;
         if (key === 'celeste theme') applyTheme(currentSettings['celeste theme']);
         if (key === 'custom css list') applyCustomStyles(currentSettings['custom css list']);
@@ -448,7 +452,11 @@ window.addEventListener('DOMContentLoaded', async () => {
             const kb = currentSettings.keybinds || {};
             if (combo === kb['toggle menu']) {
                 const menu = getMenuOverlay();
-                if (menu) menu.style.display = menu.style.display === 'none' ? 'flex' : 'none';
+                if (menu) {
+                    const opening = menu.style.display === 'none';
+                    menu.style.display = opening ? 'flex' : 'none';
+                    _menuOpen = opening;
+                }
             } else if (combo === kb['copy url']) {
                 navigator.clipboard.writeText(window.location.href);
             } else if (combo === kb['return main page']) {
