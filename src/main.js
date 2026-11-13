@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, ipcMain, net, protocol, shell } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, net, protocol, shell, session } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const os   = require('os');
@@ -31,6 +31,62 @@ drpc.init(settingsManager.settings);
 let mainWindow;
 let splashWindow;
 let _updateDownloaded = false;
+
+const _incognitoSettings = new Map();
+
+function getDefaultSettings() {
+  try {
+    const fs = require('fs');
+    const p = path.join(__dirname, 'assets', 'default.json');
+    return JSON.parse(fs.readFileSync(p, 'utf8'));
+  } catch (_) { return {}; }
+}
+
+function isIncognito(wc) {
+  return _incognitoSettings.has(wc.id);
+}
+
+function createIncognitoWindow(useCurrentSettings = false) {
+  const baseSettings = useCurrentSettings
+    ? { ...settingsManager.settings }
+    : getDefaultSettings();
+
+  const incognitoWin = new BrowserWindow({
+    minWidth: 900,
+    minHeight: 540,
+    title: 'Celeste - Incognito',
+    backgroundColor: '#0d0d1a',
+    icon: path.join(__dirname, 'assets/img/icon.png'),
+    show: true,
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      sandbox: false,
+      preload: path.join(__dirname, 'preload.js'),
+      backgroundThrottling: false,
+      spellcheck: false,
+      partition: 'incognito',
+    }
+  });
+
+  Menu.setApplicationMenu(null);
+  incognitoWin.maximize();
+  incognitoWin.on('page-title-updated', e => e.preventDefault());
+  incognitoWin.webContents.setWindowOpenHandler(({ url }) => {
+    shell.openExternal(url);
+    return { action: 'deny' };
+  });
+
+  const wcId = incognitoWin.webContents.id;
+
+  _incognitoSettings.set(wcId, { ...baseSettings });
+
+  incognitoWin.loadURL('https://kirka.io/');
+
+  incognitoWin.on('closed', () => {
+    _incognitoSettings.delete(wcId);
+  });
+}
 
 function boostProcessPriorities() {
   try {
@@ -188,6 +244,37 @@ app.whenReady().then(async () => {
   }
 
   boostProcessPriorities();
+
+  ipcMain.on('action-open-incognito', (_, useCurrentSettings) => createIncognitoWindow(useCurrentSettings));
+
+  ipcMain.removeHandler('get-settings');
+  ipcMain.handle('get-settings', (e) => {
+    if (isIncognito(e.sender)) return _incognitoSettings.get(e.sender.id);
+    return settingsManager.settings;
+  });
+  ipcMain.removeHandler('update-setting');
+  ipcMain.handle('update-setting', (e, key, value) => {
+    if (isIncognito(e.sender)) {
+      const s = _incognitoSettings.get(e.sender.id);
+      if (s) s[key] = value;
+      return { success: true };
+    }
+    settingsManager.settings[key] = value;
+    settingsManager.scheduleSave();
+    return { success: true };
+  });
+  ipcMain.removeHandler('update-settings-bulk');
+  ipcMain.handle('update-settings-bulk', (e, newSettings) => {
+    if (isIncognito(e.sender)) {
+      const s = _incognitoSettings.get(e.sender.id);
+      if (s) { Object.keys(s).forEach(k => delete s[k]); Object.assign(s, newSettings); }
+      return { success: true };
+    }
+    Object.keys(settingsManager.settings).forEach(k => delete settingsManager.settings[k]);
+    Object.assign(settingsManager.settings, newSettings);
+    settingsManager.scheduleSave();
+    return { success: true };
+  });
 
   const fs = require('fs');
   const MAX_CACHE = 256;

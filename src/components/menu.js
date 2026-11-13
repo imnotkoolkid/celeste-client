@@ -43,6 +43,7 @@ window.api.getSettings().then(settings => {
             ['toggle-show-tab-info', 'show tab info'],
             ['toggle-skip-loading-screen', 'skip loading screen'],
             ['toggle-swapper-enabled', 'swapper enabled'],
+            ['toggle-incognito-current-settings', 'incognito use current settings'],
         ];
         for (const [id, key] of togglePairs) {
             const el = $(id);
@@ -176,6 +177,13 @@ window.api.getSettings().then(settings => {
             };
             document.addEventListener('keydown', handler, true);
         });
+    });
+    $('btn-open-incognito')?.addEventListener('click', () => {
+        const useCurrentSettings = !!$('toggle-incognito-current-settings')?.checked;
+        window.api.actionOpenIncognito(useCurrentSettings);
+    });
+    $('toggle-incognito-current-settings')?.addEventListener('change', e => {
+        window.api.updateSetting('incognito use current settings', e.target.checked);
     });
     const resetBtn = $('btn-reset-settings');
     let undoTimeout = null, countdownInterval = null, backupSettings = null;

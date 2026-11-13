@@ -92,8 +92,8 @@
             </div>
             <div class="setting-item sub-item" id="plugin-css-code-container" style="display: none;">
               <span class="setting-label">CSS Code</span>
-              <textarea class="setting-input" id="input-plugin-css-code"
-                placeholder="/* Paste your custom CSS here */" style="min-height: 80px;"></textarea>
+              <textarea class="setting-input" id="input-plugin-css-code" placeholder="/* Paste your custom CSS here */"
+                style="min-height: 80px;"></textarea>
             </div>
             <div class="setting-item sub-item">
               <span class="setting-label">CSS Name</span>
@@ -198,6 +198,8 @@
             data-keybind="devtools">F12 or Ctrl+Shift+I</span></div>
         <div class="setting-item"><span class="setting-label">Quick Restart</span><span class="hotkey-value"
             data-keybind="quick restart">Ctrl+Shift+r</span></div>
+        <div class="setting-item"><span class="setting-label">Open Incognito</span><span
+            class="hotkey-value" data-keybind="open incognito">Ctrl+Shift+N</span></div>
 
         <div class="setting-category">
           <div class="category-header">Zoom In/Out</div>
@@ -208,6 +210,20 @@
           <div class="setting-item sub-item"><span class="setting-label">Zoom Reset</span><span class="hotkey-value"
               data-keybind="zoom reset">0</span></div>
         </div>
+        <div class="setting-category">
+          <div class="category-header">Incognito</div>
+          <div class="setting-item sub-item">
+            <span class="setting-label">Open Incognito Window</span>
+            <button id="btn-open-incognito" class="menu-action-btn">Open</button>
+          </div>
+          <div class="setting-item sub-item">
+            <span class="setting-label">Start with current settings</span>
+            <label class="toggle-switch"><input type="checkbox" id="toggle-incognito-current-settings"><span
+                class="slider"></span></label>
+          </div>
+        </div>
+
+
 
         <div class="setting-item">
           <span class="setting-label">Reset Settings</span>
@@ -271,7 +287,8 @@
               <span class="setting-label">Enable Swapper</span>
               <span class="setting-label-sub">Requires Restart</span>
             </div>
-            <label class="toggle-switch"><input type="checkbox" id="toggle-swapper-enabled"><span class="slider"></span></label>
+            <label class="toggle-switch"><input type="checkbox" id="toggle-swapper-enabled"><span
+                class="slider"></span></label>
           </div>
           <div class="setting-item sub-item">
             <span class="setting-label">Open Swapper Folder</span>

@@ -384,6 +384,7 @@ contextBridge.exposeInMainWorld('api', {
     actionQuickRestart: () => ipcRenderer.send('action-quick-restart'),
     actionZoom: dir => ipcRenderer.send('action-zoom', dir),
     actionOpenSwapperFolder: () => ipcRenderer.send('action-open-swapper-folder'),
+    actionOpenIncognito: (useCurrentSettings = false) => ipcRenderer.send('action-open-incognito', useCurrentSettings),
     buildCombo: (ctrlKey, shiftKey, altKey, code) => buildCombo({ ctrlKey, shiftKey, altKey, code })
 });
 window.addEventListener('DOMContentLoaded', async () => {
@@ -474,6 +475,8 @@ window.addEventListener('DOMContentLoaded', async () => {
                 ipcRenderer.send('action-devtools');
             } else if (combo === kb['quick restart']) {
                 ipcRenderer.send('action-quick-restart');
+            } else if (combo === (kb['open incognito'] || 'Ctrl+Shift+KeyN')) {
+                ipcRenderer.send('action-open-incognito', !!currentSettings['incognito use current settings']);
             } else if (combo === kb['zoom in']) {
                 ipcRenderer.send('action-zoom', 'in');
             } else if (combo === kb['zoom out']) {

@@ -31,9 +31,11 @@
     "fullscreen": "F11",
     "devtools": "F12",
     "quick restart": "Ctrl+Shift+KeyR",
+    "open incognito": "Ctrl+Shift+KeyN",
     "zoom in": "Equal",
     "zoom out": "Minus",
     "zoom reset": "Digit0"
   },
-  "custom scripts": []
+  "custom scripts": [],
+  "incognito use current settings": false
 }
