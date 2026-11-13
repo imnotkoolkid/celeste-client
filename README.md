@@ -1,5 +1,5 @@
 # Celeste Client
-
+> work in progress, current state does not represent final product
 
 ## Build Instructions
 
