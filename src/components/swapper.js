@@ -13,7 +13,8 @@ const initResourceSwapper = async (enabled) => {
     const swapFiles = {};
 
     protocol.handle('celeste', (request) => {
-        let p = swapFiles[request.url.slice(10)]; // 'celeste://'.length === 10
+        let key = request.url.replace(/^celeste:\/\//i, '').replace(/(\?.*)|(#.*)/g, '');
+        let p = swapFiles[key];
         if (!p) return new Response(null, { status: 404 });
         if (p.startsWith('/')) p = p.slice(1);
         if (process.platform === 'win32' && /^[a-zA-Z]\//.test(p)) {
@@ -41,7 +42,7 @@ const initResourceSwapper = async (enabled) => {
             if (entry.isDirectory()) return collectSwapFiles(filePath);
             const relPath = path.relative(SWAP_FOLDER, filePath).replace(/\\/g, '/');
             if (relPath.startsWith('assets/media/') || relPath.startsWith('assets/img/')) {
-                swapFiles[`://kirka.io/${relPath}`.replace(/_/g, '')] = filePath.replace(/\\/g, '/');
+                swapFiles[`kirka.io/${relPath}`.replace(/_/g, '')] = filePath.replace(/\\/g, '/');
             }
         }));
     }
@@ -53,7 +54,7 @@ const initResourceSwapper = async (enabled) => {
     session.defaultSession.webRequest.onBeforeRequest(
         { urls: ['*://kirka.io/*', '*://*.kirka.io/*'], types: ['image', 'media'] },
         (details, callback) => {
-            const cleanedUrl = details.url.replace(/^https?|(\?.*)|(\#.*)|\_/gi, '');
+            const cleanedUrl = details.url.replace(/^https?:\/\//i, '').replace(/(\?.*)|(#.*)|_/g, '');
             callback(swapFiles[cleanedUrl] ? { redirectURL: 'celeste://' + cleanedUrl } : {});
         }
     );

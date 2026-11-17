@@ -209,24 +209,66 @@ window.api.getSettings().then(settings => {
     bindIntInput('input-keystroke-x', 'keystroke overlay x');
     bindIntInput('input-keystroke-y', 'keystroke overlay y');
 
+    let activeKeybindHandler = null;
+    let activeKeybindEl = null;
+
+    const cancelKeybindListening = () => {
+        if (activeKeybindHandler) {
+            document.removeEventListener('keydown', activeKeybindHandler, true);
+            activeKeybindHandler = null;
+        }
+        if (activeKeybindEl) {
+            const orig = settings.keybinds?.[activeKeybindEl.dataset.keybind] || '';
+            activeKeybindEl.textContent = orig.replace(/Key|Digit/g, '') || 'None';
+            activeKeybindEl.style.opacity = '1';
+            activeKeybindEl = null;
+        }
+    };
+
     root.querySelectorAll('.hotkey-value').forEach(el => {
-        el.addEventListener('click', () => {
+        el.addEventListener('click', e => {
+            e.stopPropagation();
+            if (activeKeybindEl === el) {
+                cancelKeybindListening();
+                return;
+            }
+            cancelKeybindListening();
+
+            activeKeybindEl = el;
             el.textContent = 'Listening...';
             el.style.opacity = '0.7';
-            const handler = e => {
-                e.preventDefault();
-                e.stopPropagation();
-                const combo = window.api.buildCombo(e.ctrlKey, e.shiftKey, e.altKey, e.code);
+
+            activeKeybindHandler = ev => {
+                ev.preventDefault();
+                ev.stopPropagation();
+
+                if (ev.code === 'Escape') {
+                    cancelKeybindListening();
+                    return;
+                }
+
+                if (['ControlLeft', 'ControlRight', 'ShiftLeft', 'ShiftRight', 'AltLeft', 'AltRight', 'MetaLeft', 'MetaRight'].includes(ev.code)) {
+                    return;
+                }
+
+                const combo = window.api.buildCombo(ev.ctrlKey, ev.shiftKey, ev.altKey, ev.code);
                 if (!settings.keybinds) settings.keybinds = {};
                 settings.keybinds[el.dataset.keybind] = combo;
                 window.api.updateSetting('keybinds', settings.keybinds);
+
                 el.textContent = combo.replace(/Key|Digit/g, '');
                 el.style.opacity = '1';
-                document.removeEventListener('keydown', handler, true);
+
+                document.removeEventListener('keydown', activeKeybindHandler, true);
+                activeKeybindHandler = null;
+                activeKeybindEl = null;
             };
-            document.addEventListener('keydown', handler, true);
+
+            document.addEventListener('keydown', activeKeybindHandler, true);
         });
     });
+
+    root.addEventListener('click', cancelKeybindListening);
 
     $('btn-open-incognito')?.addEventListener('click', () => {
         window.api.actionOpenIncognito(!!$('toggle-incognito-current-settings')?.checked);

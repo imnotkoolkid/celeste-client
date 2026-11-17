@@ -27,26 +27,48 @@ const DOWNLOAD_BUTTON = { label: 'Download', url: 'https://github.com/imnotkoolk
 
 class DRPC {
     constructor() {
-        this.client = new DiscordRPC.Client({ transport: 'ipc' });
+        this.client = null;
         this.connected = false;
         this.time = new Date();
         this.state = '';
         this.currentFullUrl = null;
         this._lastActivityState = null;
+        this.settings = null;
     }
     init(settings) {
         this.settings = settings;
-        if (!settings['show rpc']) return;
-        DiscordRPC.register(CLIENT_ID);
-        this.client.on('ready', () => { this.connected = true; this.setActivity(); });
-        this.client.login({ clientId: CLIENT_ID }).catch(err => {
-            console.log('Discord RPC failed to connect:', err.message);
+        if (!settings || !settings['show rpc']) {
+            this.destroy();
+            return;
+        }
+        if (this.connected && this.client) {
+            this.setActivity();
+            return;
+        }
+        this.destroy();
+        try {
+            DiscordRPC.register(CLIENT_ID);
+            this.client = new DiscordRPC.Client({ transport: 'ipc' });
+            this.client.on('ready', () => {
+                this.connected = true;
+                this.setActivity();
+            });
+            this.client.login({ clientId: CLIENT_ID }).catch(err => {
+                console.log('Discord RPC failed to connect:', err.message);
+                this.connected = false;
+            });
+        } catch (e) {
+            console.error('Failed to init Discord RPC:', e);
             this.connected = false;
-        });
+        }
     }
     destroy() {
         this.connected = false;
-        this.client.destroy().catch(() => {});
+        this._lastActivityState = null;
+        if (this.client) {
+            try { this.client.destroy().catch(() => {}); } catch (_) {}
+            this.client = null;
+        }
     }
     setActivity() {
         if (!this.connected || this._lastActivityState === this.state) return;

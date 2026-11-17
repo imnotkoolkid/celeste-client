@@ -261,6 +261,9 @@ app.whenReady().then(async () => {
     }
     settingsManager.settings[key] = value;
     settingsManager.scheduleSave();
+    if (key === 'show rpc' || key === 'rpc match info') {
+      drpc.init(settingsManager.settings);
+    }
     return { success: true };
   });
 
@@ -269,7 +272,10 @@ app.whenReady().then(async () => {
     if (target) {
       Object.keys(target).forEach(k => delete target[k]);
       Object.assign(target, newSettings);
-      if (!isIncognito(e.sender)) settingsManager.scheduleSave();
+      if (!isIncognito(e.sender)) {
+        settingsManager.scheduleSave();
+        drpc.init(settingsManager.settings);
+      }
     }
     return { success: true };
   });
