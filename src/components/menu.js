@@ -91,20 +91,56 @@ window.api.getSettings().then(settings => {
             if (key && s.keybinds?.[key]) el.textContent = s.keybinds[key].replace(/Key|Digit/g, '');
         });
 
-        const angleSelect = $('select-angle-backend');
-        if (angleSelect) {
-            if (!angleSelect.dataset.populated) {
-                angleSelect.dataset.populated = 'true';
-                const plat = window.api.platform;
-                angleSelect.innerHTML = plat === 'darwin'
-                    ? '<option value="default">System Default (Metal)</option><option value="metal">Metal</option><option value="opengl">OpenGL</option>'
-                    : plat === 'linux'
-                        ? '<option value="default">System Default</option><option value="vulkan">Vulkan</option><option value="opengl">OpenGL</option>'
-                        : '<option value="default">Direct3D 11 (Default)</option><option value="d3d9">Direct3D 9</option><option value="vulkan">Vulkan</option><option value="d3d11on12">D3D11 on 12</option><option value="opengl">OpenGL</option>';
+        const dropdown = $('dropdown-angle-backend');
+        if (dropdown) {
+            const val = s['angle backend'] || 'default';
+            const opt = dropdown.querySelector(`[data-val="${val}"]`) || dropdown.querySelector('[data-val="default"]');
+            if (opt) {
+                dropdown.querySelector('.custom-dropdown-label').textContent = opt.textContent;
+                dropdown.querySelectorAll('.custom-dropdown-option').forEach(o => o.classList.toggle('active', o === opt));
             }
-            angleSelect.value = s['angle backend'] || 'default';
         }
     };
+
+    const backendDropdown = $('dropdown-angle-backend');
+    if (backendDropdown) {
+        const plat = window.api.platform;
+        if (plat !== 'win32') backendDropdown.querySelectorAll('.win-only').forEach(el => el.remove());
+        if (plat !== 'darwin') backendDropdown.querySelectorAll('.mac-only').forEach(el => el.remove());
+        const def = backendDropdown.querySelector('[data-val="default"]');
+        if (def && plat === 'darwin') def.textContent = 'System Default (Metal)';
+        else if (def && plat === 'linux') def.textContent = 'System Default';
+
+        const trigger = backendDropdown.querySelector('.custom-dropdown-trigger');
+        const menu = backendDropdown.querySelector('.custom-dropdown-menu');
+
+        trigger?.addEventListener('click', e => {
+            e.stopPropagation();
+            const isOpen = backendDropdown.classList.toggle('open');
+            if (isOpen && trigger && menu) {
+                const rect = trigger.getBoundingClientRect();
+                menu.style.top = `${rect.bottom + 4}px`;
+                menu.style.right = `${window.innerWidth - rect.right}px`;
+                menu.style.minWidth = `${rect.width}px`;
+            }
+        });
+
+        backendDropdown.querySelectorAll('.custom-dropdown-option').forEach(opt => {
+            opt.addEventListener('click', e => {
+                e.stopPropagation();
+                settings['angle backend'] = opt.dataset.val;
+                window.api.updateSetting('angle backend', opt.dataset.val);
+                updateUI(settings);
+                backendDropdown.classList.remove('open');
+            });
+        });
+
+        const closeDropdown = () => backendDropdown.classList.remove('open');
+        root.addEventListener('click', closeDropdown);
+        document.addEventListener('click', closeDropdown);
+        root.querySelector('.menu-content')?.addEventListener('scroll', closeDropdown);
+        window.addEventListener('resize', closeDropdown);
+    }
 
     updateUI(settings);
 
@@ -124,7 +160,6 @@ window.api.getSettings().then(settings => {
         ['toggle-incognito-current-settings', 'incognito use current settings'],
     ].forEach(([id, key]) => bindToggle(id, key));
 
-    $('select-angle-backend')?.addEventListener('change', e => window.api.updateSetting('angle backend', e.target.value));
     $('btn-open-swapper-folder')?.addEventListener('click', () => window.api.actionOpenSwapperFolder());
 
     const bindInput = (id, key) => $(id)?.addEventListener('input', e => window.api.updateSetting(key, e.target.value));
