@@ -160,6 +160,28 @@
 .setting-input::placeholder { color: var(--txt2); }
 .setting-input.num-input { width: 72px; }
 
+.setting-select {
+  background-color: var(--bg1);
+  border: 1px solid var(--bg3);
+  color: var(--txt1);
+  padding: 6px 10px;
+  border-radius: var(--br-rd);
+  font-size: 0.8rem;
+  font-weight: 600;
+  outline: none;
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+
+.setting-select:focus {
+  border-color: var(--accent);
+}
+
+.setting-select option {
+  background-color: var(--bg2);
+  color: var(--txt1);
+}
+
 textarea.setting-input {
   height: 60px;
   resize: none;

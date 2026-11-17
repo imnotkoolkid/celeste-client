@@ -1,5 +1,6 @@
 const DiscordRPC = require('discord-rpc');
 const { URL } = require('url');
+
 const STATIC_STATES = {
     '/': 'In main lobby',
     '/hub/leaderboard': 'Viewing player leaderboard',
@@ -23,6 +24,7 @@ const STATIC_STATES = {
 };
 const CLIENT_ID = '1506214153369423922';
 const DOWNLOAD_BUTTON = { label: 'Download', url: 'https://github.com/imnotkoolkid/celeste-client/releases' };
+
 class DRPC {
     constructor() {
         this.client = new DiscordRPC.Client({ transport: 'ipc' });
@@ -31,7 +33,6 @@ class DRPC {
         this.state = '';
         this.currentFullUrl = null;
         this._lastActivityState = null;
-        this._interval = null;
     }
     init(settings) {
         this.settings = settings;
@@ -42,16 +43,13 @@ class DRPC {
             console.log('Discord RPC failed to connect:', err.message);
             this.connected = false;
         });
-        this._interval = setInterval(() => { if (this.connected) this.setActivity(); }, 15000);
     }
     destroy() {
-        if (this._interval) { clearInterval(this._interval); this._interval = null; }
         this.connected = false;
         this.client.destroy().catch(() => {});
     }
     setActivity() {
-        if (!this.connected) return;
-        if (this._lastActivityState === this.state) return;
+        if (!this.connected || this._lastActivityState === this.state) return;
         this._lastActivityState = this.state;
         const buttons = [DOWNLOAD_BUTTON];
         if (this.currentFullUrl) {

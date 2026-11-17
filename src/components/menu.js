@@ -1,35 +1,44 @@
 const tabs = root.querySelectorAll('.menu-tabs .tab');
 const panes = root.querySelectorAll('.tab-pane');
-const tabMap = new Map();
+const tabByPane = new Map();
 const paneMap = new Map();
-tabs.forEach(t => tabMap.set(t, t.dataset.target));
+
+tabs.forEach(t => tabByPane.set(t.dataset.target, t));
 panes.forEach(p => paneMap.set(p.id, p));
+
 let _activeTab = root.querySelector('.menu-tabs .tab.active');
 let _activePane = root.querySelector('.tab-pane.active');
-tabs.forEach(tab => {
-    tab.addEventListener('click', () => {
-        if (_activeTab === tab) return;
-        _activeTab?.classList.remove('active');
-        _activePane?.classList.remove('active');
-        tab.classList.add('active');
-        const pane = paneMap.get(tabMap.get(tab));
-        pane?.classList.add('active');
-        _activeTab = tab;
-        _activePane = pane;
-    });
-});
+
+const switchTab = id => {
+    const tab = tabByPane.get(id);
+    const pane = paneMap.get(id);
+    if (!tab || !pane || _activeTab === tab) return;
+    _activeTab?.classList.remove('active');
+    _activePane?.classList.remove('active');
+    tab.classList.add('active');
+    pane.classList.add('active');
+    _activeTab = tab;
+    _activePane = pane;
+};
+
+tabs.forEach(tab => tab.addEventListener('click', () => switchTab(tab.dataset.target)));
+
 if (!window.api) return;
+
 window.api.getSettings().then(settings => {
     const $ = id => root.getElementById(id);
+
     const updateSliderBg = el => {
         const pct = ((el.value - (el.min || 0)) / ((el.max || 100) - (el.min || 0))) * 100;
         el.style.background = `linear-gradient(to right, var(--accent) ${pct}%, var(--bg1) ${pct}%)`;
     };
+
     const showContainers = (val, urlId, codeId) => {
         const u = $(urlId), c = $(codeId);
         if (u) u.style.display = val === 'url' ? 'flex' : 'none';
         if (c) c.style.display = val === 'code' ? 'flex' : 'none';
     };
+
     const updateUI = s => {
         const togglePairs = [
             ['toggle-unlimited-fps', 'unlimited fps'],
@@ -47,22 +56,23 @@ window.api.getSettings().then(settings => {
         ];
         for (const [id, key] of togglePairs) {
             const el = $(id);
-            if (el) el.checked = !!(key === 'rpc match info' || key === 'ui animations'
-                ? s[key] !== false
-                : s[key]);
+            if (el) el.checked = !!(key === 'rpc match info' || key === 'ui animations' ? s[key] !== false : s[key]);
         }
+
         const inputPairs = [
             ['input-hitmarker', 'custom hitmarker'],
             ['input-killicon', 'custom kill icon'],
+            ['input-keystroke-x', 'keystroke overlay x'],
+            ['input-keystroke-y', 'keystroke overlay y'],
         ];
         for (const [id, key] of inputPairs) {
             const el = $(id);
-            if (el) el.value = s[key] || '';
+            if (el) el.value = s[key] ?? '';
         }
 
         const chatMode = s['game chat'] || 'default';
-        $('group-chat-mode')?.querySelectorAll('.btn-box').forEach(b =>
-            b.classList.toggle('active', b.dataset.val === chatMode));
+        $('group-chat-mode')?.querySelectorAll('.btn-box').forEach(b => b.classList.toggle('active', b.dataset.val === chatMode));
+
         const sliderPairs = [
             ['input-ui-opacity', 'val-ui-opacity', 'in-game ui opacity'],
             ['input-ui-scale', 'val-ui-scale', 'in-game ui scale'],
@@ -75,28 +85,30 @@ window.api.getSettings().then(settings => {
             valEl.textContent = input.value;
             updateSliderBg(input);
         }
-        const kPairs = [
-            ['input-keystroke-x', 'keystroke overlay x'],
-            ['input-keystroke-y', 'keystroke overlay y'],
-        ];
-        for (const [id, key] of kPairs) {
-            const el = $(id);
-            if (el) el.value = s[key] ?? 0;
-        }
-        const scaleEl = $('input-keystroke-scale'), scaleValEl = $('val-keystroke-scale');
-        if (scaleEl && scaleValEl) {
-            scaleEl.value = s['keystroke overlay scale'] ?? 100;
-            scaleValEl.textContent = scaleEl.value;
-            updateSliderBg(scaleEl);
-        }
+
         root.querySelectorAll('.hotkey-value').forEach(el => {
             const key = el.dataset.keybind;
             if (key && s.keybinds?.[key]) el.textContent = s.keybinds[key].replace(/Key|Digit/g, '');
         });
+
+        const angleSelect = $('select-angle-backend');
+        if (angleSelect) {
+            if (!angleSelect.dataset.populated) {
+                angleSelect.dataset.populated = 'true';
+                const plat = window.api.platform;
+                angleSelect.innerHTML = plat === 'darwin'
+                    ? '<option value="default">System Default (Metal)</option><option value="metal">Metal</option><option value="opengl">OpenGL</option>'
+                    : plat === 'linux'
+                        ? '<option value="default">System Default</option><option value="vulkan">Vulkan</option><option value="opengl">OpenGL</option>'
+                        : '<option value="default">Direct3D 11 (Default)</option><option value="d3d9">Direct3D 9</option><option value="vulkan">Vulkan</option><option value="d3d11on12">D3D11 on 12</option><option value="opengl">OpenGL</option>';
+            }
+            angleSelect.value = s['angle backend'] || 'default';
+        }
     };
+
     updateUI(settings);
-    const bindToggle = (id, key) =>
-        $(id)?.addEventListener('change', e => window.api.updateSetting(key, e.target.checked));
+
+    const bindToggle = (id, key) => $(id)?.addEventListener('change', e => window.api.updateSetting(key, e.target.checked));
     [
         ['toggle-unlimited-fps', 'unlimited fps'],
         ['toggle-start-fullscreen', 'start fullscreen'],
@@ -109,13 +121,16 @@ window.api.getSettings().then(settings => {
         ['toggle-show-tab-info', 'show tab info'],
         ['toggle-skip-loading-screen', 'skip loading screen'],
         ['toggle-swapper-enabled', 'swapper enabled'],
+        ['toggle-incognito-current-settings', 'incognito use current settings'],
     ].forEach(([id, key]) => bindToggle(id, key));
+
+    $('select-angle-backend')?.addEventListener('change', e => window.api.updateSetting('angle backend', e.target.value));
     $('btn-open-swapper-folder')?.addEventListener('click', () => window.api.actionOpenSwapperFolder());
-    const bindInput = (id, key) =>
-        $(id)?.addEventListener('input', e => window.api.updateSetting(key, e.target.value));
+
+    const bindInput = (id, key) => $(id)?.addEventListener('input', e => window.api.updateSetting(key, e.target.value));
     bindInput('input-hitmarker', 'custom hitmarker');
     bindInput('input-killicon', 'custom kill icon');
-    const themeToggle = $('toggle-celeste-theme');
+
     const bindButtonGroup = (groupId, onSelect) => {
         const group = $(groupId);
         if (!group) return;
@@ -127,6 +142,7 @@ window.api.getSettings().then(settings => {
         }));
     };
     bindButtonGroup('group-chat-mode', val => window.api.updateSetting('game chat', val));
+
     const bindSlider = (inputId, valId, key) => {
         const input = $(inputId), valEl = $(valId);
         if (!input || !valEl) return;
@@ -139,10 +155,8 @@ window.api.getSettings().then(settings => {
     bindSlider('input-ui-opacity', 'val-ui-opacity', 'in-game ui opacity');
     bindSlider('input-ui-scale', 'val-ui-scale', 'in-game ui scale');
     bindSlider('input-keystroke-scale', 'val-keystroke-scale', 'keystroke overlay scale');
-    const sanitizeInt = val => {
-        const neg = val.startsWith('-');
-        return (neg ? '-' : '') + val.replace(/[^0-9]/g, '');
-    };
+
+    const sanitizeInt = val => (val.startsWith('-') ? '-' : '') + val.replace(/[^0-9]/g, '');
     const bindIntInput = (id, key) => {
         const el = $(id);
         if (!el) return;
@@ -159,7 +173,7 @@ window.api.getSettings().then(settings => {
     };
     bindIntInput('input-keystroke-x', 'keystroke overlay x');
     bindIntInput('input-keystroke-y', 'keystroke overlay y');
-    const buildCombo = e => window.api.buildCombo(e.ctrlKey, e.shiftKey, e.altKey, e.code);
+
     root.querySelectorAll('.hotkey-value').forEach(el => {
         el.addEventListener('click', () => {
             el.textContent = 'Listening...';
@@ -167,7 +181,7 @@ window.api.getSettings().then(settings => {
             const handler = e => {
                 e.preventDefault();
                 e.stopPropagation();
-                const combo = buildCombo(e);
+                const combo = window.api.buildCombo(e.ctrlKey, e.shiftKey, e.altKey, e.code);
                 if (!settings.keybinds) settings.keybinds = {};
                 settings.keybinds[el.dataset.keybind] = combo;
                 window.api.updateSetting('keybinds', settings.keybinds);
@@ -178,13 +192,11 @@ window.api.getSettings().then(settings => {
             document.addEventListener('keydown', handler, true);
         });
     });
+
     $('btn-open-incognito')?.addEventListener('click', () => {
-        const useCurrentSettings = !!$('toggle-incognito-current-settings')?.checked;
-        window.api.actionOpenIncognito(useCurrentSettings);
+        window.api.actionOpenIncognito(!!$('toggle-incognito-current-settings')?.checked);
     });
-    $('toggle-incognito-current-settings')?.addEventListener('change', e => {
-        window.api.updateSetting('incognito use current settings', e.target.checked);
-    });
+
     const resetBtn = $('btn-reset-settings');
     let undoTimeout = null, countdownInterval = null, backupSettings = null;
     if (resetBtn) {
@@ -198,10 +210,8 @@ window.api.getSettings().then(settings => {
                     const defaults = window.api.getDefaults();
                     for (const k in settings) delete settings[k];
                     Object.assign(settings, backupSettings);
-                    if (defaults.keybinds) {
-                        settings.keybinds = { ...defaults.keybinds, ...(backupSettings.keybinds || {}) };
-                    }
-                    await window.api.updateSettingsBulk(settings).catch(err => console.error('Failed to restore settings:', err));
+                    if (defaults.keybinds) settings.keybinds = { ...defaults.keybinds, ...(backupSettings.keybinds || {}) };
+                    await window.api.updateSettingsBulk(settings).catch(console.error);
                     updateUI(settings);
                     backupSettings = null;
                 }
@@ -210,7 +220,7 @@ window.api.getSettings().then(settings => {
                 const defaults = window.api.getDefaults();
                 for (const k in settings) delete settings[k];
                 Object.assign(settings, defaults);
-                await window.api.updateSettingsBulk(settings).catch(err => console.error('Failed to reset settings:', err));
+                await window.api.updateSettingsBulk(settings).catch(console.error);
                 updateUI(settings);
                 resetBtn.classList.add('undo-mode');
                 let timeLeft = 3;
@@ -227,6 +237,7 @@ window.api.getSettings().then(settings => {
             }
         });
     }
+
     root.querySelectorAll('.plugin-dropdown-toggle').forEach(el => {
         el.addEventListener('click', () => {
             const target = $(el.dataset.target);
@@ -236,180 +247,108 @@ window.api.getSettings().then(settings => {
             el.classList.toggle('open', !isOpen);
         });
     });
-    bindButtonGroup('plugin-script-mode-group', val =>
-        showContainers(val, 'plugin-script-url-container', 'plugin-script-code-container'));
 
-    bindButtonGroup('plugin-css-mode-group', val =>
-        showContainers(val, 'plugin-css-url-container', 'plugin-css-code-container'));
+    bindButtonGroup('plugin-script-mode-group', val => showContainers(val, 'plugin-script-url-container', 'plugin-script-code-container'));
+    bindButtonGroup('plugin-css-mode-group', val => showContainers(val, 'plugin-css-url-container', 'plugin-css-code-container'));
 
-    const renderPluginCSS = () => {
-        const list = $('manage-css-list');
+    const renderPluginList = (key, listId, labelPrefix) => {
+        const list = $(listId);
         if (!list) return;
-        while (list.firstChild) list.removeChild(list.firstChild);
-        const styles = settings['custom css list'] || [];
-        if (styles.length === 0) return;
+        list.innerHTML = '';
+        const items = settings[key] || [];
+        if (!items.length) return;
+
         const frag = document.createDocumentFragment();
-        styles.forEach((style, idx) => {
-            const item = document.createElement('div');
-            item.className = 'plugin-script-item';
+        items.forEach((item, idx) => {
+            const row = document.createElement('div');
+            row.className = 'plugin-script-item';
+
             const nameSpan = document.createElement('span');
             nameSpan.className = 'setting-label';
-            nameSpan.textContent = style.name || `CSS ${idx + 1}`;
+            nameSpan.textContent = item.name || `${labelPrefix} ${idx + 1}`;
+
             const controls = document.createElement('div');
             controls.style.cssText = 'display:flex;align-items:center;gap:8px;';
+
             const delBtn = document.createElement('button');
             delBtn.className = 'plugin-btn-remove';
             delBtn.textContent = 'Remove';
+
             const label = document.createElement('label');
             label.className = 'toggle-switch';
             const chk = document.createElement('input');
             chk.type = 'checkbox';
-            chk.checked = !!style.enabled;
-            const sliderSpan = document.createElement('span');
-            sliderSpan.className = 'slider';
-            label.appendChild(chk);
-            label.appendChild(sliderSpan);
-            controls.appendChild(delBtn);
-            controls.appendChild(label);
-            item.appendChild(nameSpan);
-            item.appendChild(controls);
-            let undoTimer = null, countdownTimer = null;
+            chk.checked = !!item.enabled;
+            const slider = document.createElement('span');
+            slider.className = 'slider';
+            label.append(chk, slider);
+
+            controls.append(delBtn, label);
+            row.append(nameSpan, controls);
+
+            let undoTimer = null, countTimer = null;
             delBtn.addEventListener('click', () => {
                 if (delBtn.classList.contains('undo-mode')) {
                     clearTimeout(undoTimer);
-                    clearInterval(countdownTimer);
+                    clearInterval(countTimer);
                     delBtn.classList.remove('undo-mode');
                     delBtn.textContent = 'Remove';
                 } else {
                     delBtn.classList.add('undo-mode');
                     let t = 3;
                     delBtn.textContent = `Undo (${t}s)`;
-                    countdownTimer = setInterval(() => {
+                    countTimer = setInterval(() => {
                         delBtn.textContent = `Undo (${--t}s)`;
-                        if (t <= 0) clearInterval(countdownTimer);
+                        if (t <= 0) clearInterval(countTimer);
                     }, 1000);
                     undoTimer = setTimeout(() => {
-                        const i = settings['custom css list'].indexOf(style);
+                        const i = settings[key].indexOf(item);
                         if (i !== -1) {
-                            settings['custom css list'].splice(i, 1);
-                            window.api.updateSetting('custom css list', settings['custom css list']);
+                            settings[key].splice(i, 1);
+                            window.api.updateSetting(key, settings[key]);
                         }
-                        renderPluginCSS();
+                        renderPluginList(key, listId, labelPrefix);
                     }, 3000);
                 }
             });
+
             chk.addEventListener('change', e => {
-                style.enabled = e.target.checked;
-                window.api.updateSetting('custom css list', settings['custom css list']);
+                item.enabled = e.target.checked;
+                window.api.updateSetting(key, settings[key]);
             });
-            frag.appendChild(item);
+
+            frag.appendChild(row);
         });
         list.appendChild(frag);
     };
-    renderPluginCSS();
 
-    $('btn-add-plugin-css')?.addEventListener('click', () => {
-        const mode = $('plugin-css-mode-group')?.querySelector('.active')?.dataset.val ?? 'url';
-        const nameInput = $('input-plugin-css-name');
-        const name = nameInput.value.trim() || `CSS ${(settings['custom css list'] || []).length + 1}`;
-        const content = (mode === 'url'
-            ? $('input-plugin-css-url')
-            : $('input-plugin-css-code'))?.value.trim();
-        if (!content) return;
-        if (!settings['custom css list']) settings['custom css list'] = [];
-        settings['custom css list'].push({ name, mode, content, enabled: true });
-        window.api.updateSetting('custom css list', settings['custom css list']);
-        nameInput.value = '';
-        const urlEl = $('input-plugin-css-url');
-        const codeEl = $('input-plugin-css-code');
-        if (urlEl) urlEl.value = '';
-        if (codeEl) codeEl.value = '';
-        renderPluginCSS();
-    });
-
-    const renderPluginScripts = () => {
-        const list = $('manage-scripts-list');
-        if (!list) return;
-        while (list.firstChild) list.removeChild(list.firstChild);
-        const scripts = settings['custom scripts'] || [];
-        if (scripts.length === 0) return;
-        const frag = document.createDocumentFragment();
-        scripts.forEach((script, idx) => {
-            const item = document.createElement('div');
-            item.className = 'plugin-script-item';
-            const nameSpan = document.createElement('span');
-            nameSpan.className = 'setting-label';
-            nameSpan.textContent = script.name || `Script ${idx + 1}`;
-            const controls = document.createElement('div');
-            controls.style.cssText = 'display:flex;align-items:center;gap:8px;';
-            const delBtn = document.createElement('button');
-            delBtn.className = 'plugin-btn-remove';
-            delBtn.textContent = 'Remove';
-            const label = document.createElement('label');
-            label.className = 'toggle-switch';
-            const chk = document.createElement('input');
-            chk.type = 'checkbox';
-            chk.checked = !!script.enabled;
-            const sliderSpan = document.createElement('span');
-            sliderSpan.className = 'slider';
-            label.appendChild(chk);
-            label.appendChild(sliderSpan);
-            controls.appendChild(delBtn);
-            controls.appendChild(label);
-            item.appendChild(nameSpan);
-            item.appendChild(controls);
-            let undoTimer = null, countdownTimer = null;
-            delBtn.addEventListener('click', () => {
-                if (delBtn.classList.contains('undo-mode')) {
-                    clearTimeout(undoTimer);
-                    clearInterval(countdownTimer);
-                    delBtn.classList.remove('undo-mode');
-                    delBtn.textContent = 'Remove';
-                } else {
-                    delBtn.classList.add('undo-mode');
-                    let t = 3;
-                    delBtn.textContent = `Undo (${t}s)`;
-                    countdownTimer = setInterval(() => {
-                        delBtn.textContent = `Undo (${--t}s)`;
-                        if (t <= 0) clearInterval(countdownTimer);
-                    }, 1000);
-                    undoTimer = setTimeout(() => {
-                        const i = settings['custom scripts'].indexOf(script);
-                        if (i !== -1) {
-                            settings['custom scripts'].splice(i, 1);
-                            window.api.updateSetting('custom scripts', settings['custom scripts']);
-                        }
-                        renderPluginScripts();
-                    }, 3000);
-                }
-            });
-            chk.addEventListener('change', e => {
-                script.enabled = e.target.checked;
-                window.api.updateSetting('custom scripts', settings['custom scripts']);
-            });
-            frag.appendChild(item);
+    const bindPluginAdd = (btnId, key, groupModeId, nameInputId, urlInputId, codeInputId, labelPrefix, renderFn) => {
+        $(btnId)?.addEventListener('click', () => {
+            const mode = $(groupModeId)?.querySelector('.active')?.dataset.val ?? 'url';
+            const nameInput = $(nameInputId);
+            const name = nameInput.value.trim() || `${labelPrefix} ${(settings[key] || []).length + 1}`;
+            const content = (mode === 'url' ? $(urlInputId) : $(codeInputId))?.value.trim();
+            if (!content) return;
+            if (!settings[key]) settings[key] = [];
+            settings[key].push({ name, mode, content, enabled: true });
+            window.api.updateSetting(key, settings[key]);
+            nameInput.value = '';
+            const u = $(urlInputId), c = $(codeInputId);
+            if (u) u.value = '';
+            if (c) c.value = '';
+            renderFn();
         });
-        list.appendChild(frag);
     };
-    renderPluginScripts();
-    $('btn-add-plugin-script')?.addEventListener('click', () => {
-        const mode = $('plugin-script-mode-group')?.querySelector('.active')?.dataset.val ?? 'url';
-        const nameInput = $('input-plugin-script-name');
-        const name = nameInput.value.trim() || `Script ${(settings['custom scripts'] || []).length + 1}`;
-        const content = (mode === 'url'
-            ? $('input-plugin-script-url')
-            : $('input-plugin-script-code'))?.value.trim();
-        if (!content) return;
-        if (!settings['custom scripts']) settings['custom scripts'] = [];
-        settings['custom scripts'].push({ name, mode, content, enabled: true });
-        window.api.updateSetting('custom scripts', settings['custom scripts']);
-        nameInput.value = '';
-        const urlEl = $('input-plugin-script-url');
-        const codeEl = $('input-plugin-script-code');
-        if (urlEl) urlEl.value = '';
-        if (codeEl) codeEl.value = '';
-        renderPluginScripts();
-    });
+
+    const renderCSS = () => renderPluginList('custom css list', 'manage-css-list', 'CSS');
+    const renderScripts = () => renderPluginList('custom scripts', 'manage-scripts-list', 'Script');
+
+    renderCSS();
+    renderScripts();
+
+    bindPluginAdd('btn-add-plugin-css', 'custom css list', 'plugin-css-mode-group', 'input-plugin-css-name', 'input-plugin-css-url', 'input-plugin-css-code', 'CSS', renderCSS);
+    bindPluginAdd('btn-add-plugin-script', 'custom scripts', 'plugin-script-mode-group', 'input-plugin-script-name', 'input-plugin-script-url', 'input-plugin-script-code', 'Script', renderScripts);
+
     const searchInput = $('menu-search-input');
     if (searchInput) {
         const allItems = [...root.querySelectorAll('.setting-item')];
@@ -425,29 +364,15 @@ window.api.getSettings().then(settings => {
             header: (cat.querySelector('.category-header')?.textContent || '').toLowerCase(),
             items: [...cat.querySelectorAll('.setting-item')],
         }));
-        const tabByPaneId = new Map();
-        tabs.forEach(t => {
-            const target = t.dataset.target;
-            tabByPaneId.set(target, t);
-        });
-        const switchTab = id => {
-            _activeTab?.classList.remove('active');
-            _activePane?.classList.remove('active');
-            const tab = tabByPaneId.get(id);
-            const pane = paneMap.get(id);
-            tab?.classList.add('active');
-            pane?.classList.add('active');
-            _activeTab = tab || null;
-            _activePane = pane || null;
-        };
+
         let searchTimeout;
         searchInput.addEventListener('input', () => {
             clearTimeout(searchTimeout);
             searchTimeout = setTimeout(() => {
                 const q = searchInput.value.trim().toLowerCase();
                 if (!q) {
-                    for (const { el } of itemMeta) el.style.display = '';
-                    for (const { el } of catMeta) el.style.display = '';
+                    itemMeta.forEach(({ el }) => { el.style.display = ''; });
+                    catMeta.forEach(({ el }) => { el.style.display = ''; });
                     updateUI(settings);
                     return;
                 }
@@ -457,12 +382,7 @@ window.api.getSettings().then(settings => {
                 }
                 let bestScore = -1, bestPaneId = null;
                 for (const { el, label, cat, pane } of itemMeta) {
-                    let score;
-                    if (cat && matchingCats.has(cat)) {
-                        score = 2;
-                    } else {
-                        score = label === q ? 3 : label.startsWith(q) ? 2 : label.includes(q) ? 1 : -1;
-                    }
+                    let score = (cat && matchingCats.has(cat)) ? 2 : (label === q ? 3 : label.startsWith(q) ? 2 : label.includes(q) ? 1 : -1);
                     el.style.display = score >= 0 ? '' : 'none';
                     if (score > bestScore) {
                         bestScore = score;
@@ -470,19 +390,14 @@ window.api.getSettings().then(settings => {
                     }
                 }
                 for (const { el, items } of catMeta) {
-                    if (matchingCats.has(el)) {
-                        el.style.display = '';
-                        items.forEach(i => { i.style.display = ''; });
-                    } else {
-                        el.style.display = items.some(i => i.style.display !== 'none') ? '' : 'none';
-                    }
+                    el.style.display = (matchingCats.has(el) || items.some(i => i.style.display !== 'none')) ? '' : 'none';
+                    if (matchingCats.has(el)) items.forEach(i => { i.style.display = ''; });
                 }
-                const pluginMode = $('plugin-script-mode-group')?.querySelector('.active')?.dataset.val ?? 'url';
-                const cssMode = $('plugin-css-mode-group')?.querySelector('.active')?.dataset.val ?? 'url';
-                showContainers(pluginMode, 'plugin-script-url-container', 'plugin-script-code-container');
-                showContainers(cssMode, 'plugin-css-url-container', 'plugin-css-code-container');
+
+                showContainers($('plugin-script-mode-group')?.querySelector('.active')?.dataset.val ?? 'url', 'plugin-script-url-container', 'plugin-script-code-container');
+                showContainers($('plugin-css-mode-group')?.querySelector('.active')?.dataset.val ?? 'url', 'plugin-css-url-container', 'plugin-css-code-container');
                 if (bestPaneId) switchTab(bestPaneId);
-            }, 100);
+            }, 80);
         });
     }
 }).catch(err => console.error('Failed to load settings:', err));

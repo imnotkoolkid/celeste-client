@@ -1,9 +1,10 @@
-const { app, BrowserWindow, Menu, ipcMain, net, protocol, shell, session } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, net, protocol, shell } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('path');
-const os   = require('os');
-const settingsManager          = require('./components/settingsManager');
-const drpc                     = require('./components/drpc');
+const fs = require('fs');
+const os = require('os');
+const settingsManager = require('./components/settingsManager');
+const drpc = require('./components/drpc');
 const { initResourceSwapper, getSwapperFolder } = require('./components/swapper');
 
 app.setName('Celeste Client');
@@ -16,10 +17,6 @@ app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
 app.commandLine.appendSwitch('disable-ipc-flooding-protection');
 app.commandLine.appendSwitch('force-color-profile', 'srgb');
 app.commandLine.appendSwitch('js-flags', '--max-old-space-size=4096');
-app.commandLine.appendSwitch('use-gl', 'angle');
-if (process.platform === 'win32') {
-  app.commandLine.appendSwitch('use-angle', 'd3d11');
-}
 
 protocol.registerSchemesAsPrivileged([
   { scheme: 'celeste', privileges: { secure: true, standard: true, supportFetchAPI: true, corsEnabled: true } }
@@ -27,20 +24,10 @@ protocol.registerSchemesAsPrivileged([
 settingsManager.init();
 drpc.init(settingsManager.settings);
 
-
 let mainWindow;
 let splashWindow;
 let _updateDownloaded = false;
-
 const _incognitoSettings = new Map();
-
-function getDefaultSettings() {
-  try {
-    const fs = require('fs');
-    const p = path.join(__dirname, 'assets', 'default.json');
-    return JSON.parse(fs.readFileSync(p, 'utf8'));
-  } catch (_) { return {}; }
-}
 
 function isIncognito(wc) {
   return _incognitoSettings.has(wc.id);
@@ -49,7 +36,7 @@ function isIncognito(wc) {
 function createIncognitoWindow(useCurrentSettings = false) {
   const baseSettings = useCurrentSettings
     ? { ...settingsManager.settings }
-    : getDefaultSettings();
+    : { ...settingsManager.defaults };
 
   const incognitoWin = new BrowserWindow({
     minWidth: 900,
@@ -78,20 +65,14 @@ function createIncognitoWindow(useCurrentSettings = false) {
   });
 
   const wcId = incognitoWin.webContents.id;
-
   _incognitoSettings.set(wcId, { ...baseSettings });
-
   incognitoWin.loadURL('https://kirka.io/');
-
-  incognitoWin.on('closed', () => {
-    _incognitoSettings.delete(wcId);
-  });
+  incognitoWin.on('closed', () => { _incognitoSettings.delete(wcId); });
 }
 
 function boostProcessPriorities() {
   try {
-    const metrics = app.getAppMetrics();
-    for (const proc of metrics) {
+    for (const proc of app.getAppMetrics()) {
       if (proc.type === 'GPU' || proc.type === 'Tab' || proc.type === 'Renderer') {
         try { os.setPriority(proc.pid, os.constants.priority.PRIORITY_HIGH); } catch (_) {}
       }
@@ -108,17 +89,12 @@ function configureUpdater() {
     _updateDownloaded = true;
     autoUpdater.quitAndInstall(true, true);
   });
-
   autoUpdater.on('error', () => {});
 }
 
 function splashProgress(step) {
   if (!splashWindow || splashWindow.isDestroyed()) return;
-  try {
-    splashWindow.webContents.executeJavaScript(
-      `window.__celesteProgress && window.__celesteProgress(${step});`
-    ).catch(() => {});
-  } catch (_) {}
+  splashWindow.webContents.executeJavaScript(`window.__celesteProgress?.(${step});`).catch(() => {});
 }
 
 function createSplash() {
@@ -142,33 +118,28 @@ function createSplash() {
   splashWindow.loadFile(path.join(__dirname, 'assets', 'html', 'loading.html'));
 
   let fakeStep = 1;
-  let progressTimer = null;
-
   splashWindow.once('ready-to-show', () => {
+    if (!splashWindow || splashWindow.isDestroyed()) return;
     splashWindow.show();
     splashProgress(fakeStep);
 
-    progressTimer = setInterval(() => {
+    splashWindow.progressTimer = setInterval(() => {
       if (!splashWindow || splashWindow.isDestroyed()) {
-        clearInterval(progressTimer);
+        clearInterval(splashWindow?.progressTimer);
         return;
       }
-      if (fakeStep < 6) {
-        fakeStep++;
+      if (++fakeStep <= 6) {
         splashProgress(fakeStep);
       } else {
-        clearInterval(progressTimer);
+        clearInterval(splashWindow.progressTimer);
       }
     }, 500);
-
-    splashWindow.progressTimer = progressTimer;
   });
 }
 
 function closeSplash() {
   if (!splashWindow || splashWindow.isDestroyed()) return;
   if (splashWindow.progressTimer) clearInterval(splashWindow.progressTimer);
-  splashProgress(7);
   splashWindow.close();
   splashWindow = null;
 }
@@ -204,13 +175,9 @@ function createWindow() {
   };
 
   ipcMain.once('loading-done', showMainWindow);
-
   mainWindow.once('ready-to-show', () => {
-    if (splashWindow && !splashWindow.isDestroyed()) {
-      showMainWindow();
-    }
+    if (splashWindow && !splashWindow.isDestroyed()) showMainWindow();
   });
-  
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url);
@@ -231,10 +198,9 @@ app.whenReady().then(async () => {
   try { os.setPriority(os.constants.priority.PRIORITY_HIGH); } catch (_) {}
 
   await initResourceSwapper(settingsManager.get('swapper enabled') !== false);
-
   createSplash();
-
   configureUpdater();
+
   if (app.isPackaged) {
     const updateCheck = autoUpdater.checkForUpdates().catch(() => {});
     await Promise.race([updateCheck, new Promise(r => setTimeout(r, 5000))]);
@@ -247,12 +213,8 @@ app.whenReady().then(async () => {
 
   ipcMain.on('action-open-incognito', (_, useCurrentSettings) => createIncognitoWindow(useCurrentSettings));
 
-  ipcMain.removeHandler('get-settings');
-  ipcMain.handle('get-settings', (e) => {
-    if (isIncognito(e.sender)) return _incognitoSettings.get(e.sender.id);
-    return settingsManager.settings;
-  });
-  ipcMain.removeHandler('update-setting');
+  ipcMain.handle('get-settings', e => isIncognito(e.sender) ? _incognitoSettings.get(e.sender.id) : settingsManager.settings);
+
   ipcMain.handle('update-setting', (e, key, value) => {
     if (isIncognito(e.sender)) {
       const s = _incognitoSettings.get(e.sender.id);
@@ -263,38 +225,19 @@ app.whenReady().then(async () => {
     settingsManager.scheduleSave();
     return { success: true };
   });
-  ipcMain.removeHandler('update-settings-bulk');
+
   ipcMain.handle('update-settings-bulk', (e, newSettings) => {
-    if (isIncognito(e.sender)) {
-      const s = _incognitoSettings.get(e.sender.id);
-      if (s) { Object.keys(s).forEach(k => delete s[k]); Object.assign(s, newSettings); }
-      return { success: true };
+    const target = isIncognito(e.sender) ? _incognitoSettings.get(e.sender.id) : settingsManager.settings;
+    if (target) {
+      Object.keys(target).forEach(k => delete target[k]);
+      Object.assign(target, newSettings);
+      if (!isIncognito(e.sender)) settingsManager.scheduleSave();
     }
-    Object.keys(settingsManager.settings).forEach(k => delete settingsManager.settings[k]);
-    Object.assign(settingsManager.settings, newSettings);
-    settingsManager.scheduleSave();
     return { success: true };
   });
 
-  const fs = require('fs');
   const MAX_CACHE = 256;
-  class LRUCache {
-    constructor(max) { this.max = max; this.map = new Map(); }
-    has(key) { return this.map.has(key); }
-    get(key) {
-      if (!this.map.has(key)) return undefined;
-      const val = this.map.get(key);
-      this.map.delete(key);
-      this.map.set(key, val);
-      return val;
-    }
-    set(key, val) {
-      if (this.map.has(key)) this.map.delete(key);
-      else if (this.map.size >= this.max) this.map.delete(this.map.keys().next().value);
-      this.map.set(key, val);
-    }
-  }
-  const resourceCache = new LRUCache(MAX_CACHE);
+  const resourceCache = new Map();
   ipcMain.handle('fetch-resource', async (_, url) => {
     if (resourceCache.has(url)) return resourceCache.get(url);
     if (!url.startsWith('http://') && !url.startsWith('https://')) return '';
@@ -302,6 +245,7 @@ app.whenReady().then(async () => {
       const res = await net.fetch(url);
       if (!res.ok) return '';
       const body = await res.text();
+      if (resourceCache.size >= MAX_CACHE) resourceCache.delete(resourceCache.keys().next().value);
       resourceCache.set(url, body);
       return body;
     } catch (err) {
@@ -309,10 +253,12 @@ app.whenReady().then(async () => {
       return '';
     }
   });
+
   ipcMain.on('action-fullscreen', e => {
     const win = BrowserWindow.fromWebContents(e.sender);
     if (win) win.setFullScreen(!win.isFullScreen());
   });
+
   let devtools = undefined;
   ipcMain.on('action-devtools', e => {
     const win = BrowserWindow.fromWebContents(e.sender);
@@ -320,9 +266,6 @@ app.whenReady().then(async () => {
     if (process.platform !== 'linux') {
       win.webContents.toggleDevTools();
     } else {
-      // Workaround for Linux DevTools issue in older Electron versions.
-      // See: https://stackoverflow.com/questions/69969658/electron-devtools-inspector-not-showing-on-linux
-      // See: https://stackoverflow.com/questions/73287303/electron-dev-tools-dont-show#comment137301808_73336044
       if (!devtools || devtools.isDestroyed()) {
         devtools = new BrowserWindow({ parent: win, width: 800, height: 600 });
         win.webContents.setDevToolsWebContents(devtools.webContents);
@@ -332,13 +275,15 @@ app.whenReady().then(async () => {
       }
     }
   });
+
   ipcMain.on('action-open-swapper-folder', () => {
     const folder = getSwapperFolder();
-    const fs = require('fs');
     if (!fs.existsSync(folder)) fs.mkdirSync(folder, { recursive: true });
     shell.openPath(folder);
   });
+
   ipcMain.on('action-quick-restart', () => { app.relaunch(); app.exit(); });
+
   let _zoomLevel = settingsManager.get('zoom level') || 0;
   ipcMain.on('action-zoom', (e, dir) => {
     const win = BrowserWindow.fromWebContents(e.sender);
@@ -351,6 +296,7 @@ app.whenReady().then(async () => {
     settingsManager.scheduleSave();
   });
 });
+
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 app.on('before-quit', () => drpc.destroy());
 app.on('activate', () => { if (!mainWindow) createWindow(); });

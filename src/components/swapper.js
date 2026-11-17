@@ -13,8 +13,7 @@ const initResourceSwapper = async (enabled) => {
     const swapFiles = {};
 
     protocol.handle('celeste', (request) => {
-        const cleanedUrl = request.url.slice('celeste://'.length);
-        let p = swapFiles[cleanedUrl];
+        let p = swapFiles[request.url.slice(10)]; // 'celeste://'.length === 10
         if (!p) return new Response(null, { status: 404 });
         if (p.startsWith('/')) p = p.slice(1);
         if (process.platform === 'win32' && /^[a-zA-Z]\//.test(p)) {
@@ -23,9 +22,8 @@ const initResourceSwapper = async (enabled) => {
         return net.fetch('file:///' + decodeURIComponent(p));
     });
 
-    const subFolders = ['media', 'img'];
-    subFolders.forEach(folder => {
-        const dir = path.join(SWAP_FOLDER, 'assets', folder);
+    ['media', 'img'].forEach(folder => {
+        const dir = path.join(swapperFolder, folder);
         if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     });
 
@@ -38,26 +36,25 @@ const initResourceSwapper = async (enabled) => {
         } catch (_) {
             return;
         }
-        await Promise.all(entries.map(async entry => {
+        await Promise.all(entries.map(entry => {
             const filePath = path.join(dir, entry.name);
             if (entry.isDirectory()) return collectSwapFiles(filePath);
             const relPath = path.relative(SWAP_FOLDER, filePath).replace(/\\/g, '/');
-            if (!relPath.startsWith('assets/media/') && !relPath.startsWith('assets/img/')) return;
-            const cleanedKey = `://kirka.io/${relPath}`.replace(/_/g, '');
-            swapFiles[cleanedKey] = filePath.replace(/\\/g, '/');
+            if (relPath.startsWith('assets/media/') || relPath.startsWith('assets/img/')) {
+                swapFiles[`://kirka.io/${relPath}`.replace(/_/g, '')] = filePath.replace(/\\/g, '/');
+            }
         }));
     }
 
     await collectSwapFiles(SWAP_FOLDER);
 
-    const hasSwapFiles = () => Object.keys(swapFiles).length > 0;
+    if (Object.keys(swapFiles).length === 0) return;
 
     session.defaultSession.webRequest.onBeforeRequest(
         { urls: ['*://kirka.io/*', '*://*.kirka.io/*'], types: ['image', 'media'] },
         (details, callback) => {
-            if (!hasSwapFiles()) return callback({});
             const cleanedUrl = details.url.replace(/^https?|(\?.*)|(\#.*)|\_/gi, '');
-            callback(cleanedUrl in swapFiles ? { redirectURL: 'celeste://' + cleanedUrl } : {});
+            callback(swapFiles[cleanedUrl] ? { redirectURL: 'celeste://' + cleanedUrl } : {});
         }
     );
 };

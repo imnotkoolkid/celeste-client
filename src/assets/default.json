@@ -23,6 +23,7 @@
   "keystroke overlay y": 0,
   "keystroke overlay scale": 100,
   "keystroke overlay removed keys": [],
+  "angle backend": "default",
   "keybinds": {
     "toggle menu": "ShiftRight",
     "copy url": "F3",

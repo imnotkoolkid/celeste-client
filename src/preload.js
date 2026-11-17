@@ -7,7 +7,6 @@ try {
     webFrame.executeJavaScript(freezeFixCode);
 } catch (_) {}
 
-
 try {
     if (!window.__celesteGpuPatched) {
         window.__celesteGpuPatched = true;
@@ -23,13 +22,12 @@ try {
     }
 } catch (_) {}
 
-
 let currentSettings = {};
 const assetCache = new Map();
 let _fontBlobUrl = null;
-
 let _menuOpen = false;
 const _SENSITIVE_KEYS = new Set(['custom css list', 'custom scripts']);
+
 function getAssetSync(assetPath, encoding) {
     const key = `${assetPath}_${encoding || 'utf8'}`;
     if (assetCache.has(key)) return assetCache.get(key);
@@ -42,49 +40,48 @@ function getAssetSync(assetPath, encoding) {
     }
 }
 
+function getFontBlobUrl() {
+    if (!_fontBlobUrl) {
+        try {
+            const fontBytes = fs.readFileSync(path.join(__dirname, 'assets', 'font', 'forza.ttf'));
+            _fontBlobUrl = URL.createObjectURL(new Blob([fontBytes], { type: 'font/ttf' }));
+        } catch (e) {
+            console.error('Failed to create font blob URL:', e);
+        }
+    }
+    return _fontBlobUrl;
+}
+
 const _styleEls = {};
-function getOrCreate(id, tag = 'style') {
-    if (_styleEls[id]) return _styleEls[id];
-    let el = document.getElementById(id);
+function setStyle(id, css, enabled = true) {
+    let el = _styleEls[id] || document.getElementById(id);
+    if (!enabled) {
+        if (el) { el.remove(); delete _styleEls[id]; }
+        return null;
+    }
     if (!el) {
-        el = document.createElement(tag);
+        el = document.createElement('style');
         el.id = id;
         document.head.appendChild(el);
+        _styleEls[id] = el;
     }
-    _styleEls[id] = el;
+    if (el.textContent !== css) el.textContent = css;
     return el;
 }
+
 function applyTheme(isCeleste) {
-    const customEl = getOrCreate('celeste-custom-css');
-    customEl.textContent = '';
-    delete customEl.dataset.url;
-    if (isCeleste) {
-        if (!document.getElementById('celeste-theme-css')) {
-            const themePath = path.join(__dirname, 'assets', 'css', 'celeste.css');
-            const css = getAssetSync(themePath);
-            if (css) {
-                const el = document.createElement('style');
-                el.id = 'celeste-theme-css';
-                el.textContent = css;
-                document.head.appendChild(el);
-                _styleEls['celeste-theme-css'] = el;
-            }
-        }
-    } else {
-        const el = document.getElementById('celeste-theme-css');
-        if (el) {
-            el.remove();
-            delete _styleEls['celeste-theme-css'];
-        }
-    }
+    setStyle('celeste-custom-css', '');
+    const themeCss = isCeleste ? getAssetSync(path.join(__dirname, 'assets', 'css', 'celeste.css')) : '';
+    setStyle('celeste-theme-css', themeCss, !!isCeleste);
 }
+
 function applyUIScaleAndOpacity(opacity = 100, scale = 100) {
     let css = '';
     if (opacity !== 100) css += `opacity: ${opacity}% !important; `;
     if (scale !== 100) css += `transform: scale(${scale / 100}) !important; `;
-    getOrCreate('celeste-ui-scale-opacity').textContent =
-        css ? `.team-score, .desktop-game-interface { ${css} }` : '';
+    setStyle('celeste-ui-scale-opacity', css ? `.team-score, .desktop-game-interface { ${css} }` : '', true);
 }
+
 function applyGameChat(chatMode) {
     const css = chatMode === 'simplified'
         ? `#bottom-left .chat .input-wrapper input { opacity: 0 !important; margin: 0 !important; }
@@ -94,68 +91,33 @@ function applyGameChat(chatMode) {
         : chatMode === 'hidden'
             ? `#bottom-left .chat .input-wrapper input, #bottom-left .chat .messages.messages-cont, .desktop-game-interface .chat>.info, .desktop-game-interface .chat .info-key-cont.enter { display: none !important; }`
             : '';
-    getOrCreate('celeste-game-chat').textContent = css;
+    setStyle('celeste-game-chat', css, true);
 }
+
 function applyGameCustomizations(hitmarker, killicon) {
     let css = '';
     window._customHitmarkerLink = hitmarker?.trim() || null;
-    if (window._customHitmarkerLink) {
-        css += `.hitmark { content: url("${window._customHitmarkerLink}") !important; }\n`;
-    }
-    if (window._hitmarkObserver) {
-        window._hitmarkObserver.disconnect();
-        window._hitmarkObserver = null;
-    }
-
+    if (window._customHitmarkerLink) css += `.hitmark { content: url("${window._customHitmarkerLink}") !important; }\n`;
+    if (window._hitmarkObserver) { window._hitmarkObserver.disconnect(); window._hitmarkObserver = null; }
     if (killicon?.trim()) {
         css += `.animate-cont::before { content: ""; background: url("${killicon.trim()}") center / contain no-repeat; width: 10rem; height: 10rem; margin-bottom: 2rem; display: inline-block; }\n.animate-cont svg { display: none !important; }\n`;
     }
-    getOrCreate('celeste-game-customizations').textContent = css;
+    setStyle('celeste-game-customizations', css, true);
 }
+
 function applyUIAnimations(enabled) {
-    if (!enabled) {
-        getOrCreate('celeste-ui-animations').textContent = '* { transition: none !important; animation: none !important; }';
-    } else {
-        const el = document.getElementById('celeste-ui-animations');
-        if (el) {
-            el.remove();
-            delete _styleEls['celeste-ui-animations'];
-        }
-    }
+    setStyle('celeste-ui-animations', '* { transition: none !important; animation: none !important; }', !enabled);
 }
+
 function applyTabInfo(enabled) {
-    if (enabled) {
-        if (!document.getElementById('celeste-tab-info-css')) {
-            const tabInfoPath = path.join(__dirname, 'assets', 'css', 'tablist-shown.css');
-            const css = getAssetSync(tabInfoPath);
-            if (css) {
-                const el = document.createElement('style');
-                el.id = 'celeste-tab-info-css';
-                el.textContent = css;
-                document.head.appendChild(el);
-                _styleEls['celeste-tab-info-css'] = el;
-            }
-        }
-    } else {
-        const el = document.getElementById('celeste-tab-info-css');
-        if (el) {
-            el.remove();
-            delete _styleEls['celeste-tab-info-css'];
-        }
-    }
+    const tabCss = enabled ? getAssetSync(path.join(__dirname, 'assets', 'css', 'tablist-shown.css')) : '';
+    setStyle('celeste-tab-info-css', tabCss, !!enabled);
 }
+
 function applySkipLoadingScreen(enabled) {
-    const id = 'celeste-skip-loading-css';
-    if (enabled) {
-        getOrCreate(id).textContent = '.loading-scene { display: none !important; }';
-    } else {
-        const el = document.getElementById(id);
-        if (el) {
-            el.remove();
-            delete _styleEls[id];
-        }
-    }
+    setStyle('celeste-skip-loading-css', '.loading-scene { display: none !important; }', !!enabled);
 }
+
 function buildCombo(e) {
     const parts = [];
     if (e.ctrlKey && !['ControlLeft', 'ControlRight'].includes(e.code)) parts.push('Ctrl');
@@ -164,10 +126,11 @@ function buildCombo(e) {
     parts.push(e.code);
     return parts.join('+');
 }
+
 const _activeCustomStyles = {};
 function applyCustomStyles(styles) {
     const activeKeys = new Set();
-    if (styles && Array.isArray(styles)) {
+    if (Array.isArray(styles)) {
         for (let i = 0; i < styles.length; i++) {
             const style = styles[i];
             if (!style.enabled) continue;
@@ -183,9 +146,7 @@ function applyCustomStyles(styles) {
                     el.textContent = style.content;
                 } else if (style.mode === 'url' && style.content) {
                     ipcRenderer.invoke('fetch-resource', style.content).then(cssCode => {
-                        if (cssCode && _activeCustomStyles[styleKey]) {
-                            el.textContent = cssCode;
-                        }
+                        if (cssCode && _activeCustomStyles[styleKey]) el.textContent = cssCode;
                     }).catch(console.error);
                 }
             } else if (style.mode === 'code' && el.textContent !== style.content) {
@@ -203,7 +164,7 @@ function applyCustomStyles(styles) {
 
 if (!window._celesteInjectedScripts) window._celesteInjectedScripts = new Set();
 function applyCustomScripts(scripts) {
-    if (!scripts || !Array.isArray(scripts)) return;
+    if (!Array.isArray(scripts)) return;
     for (const script of scripts) {
         if (!script.enabled) continue;
         const scriptKey = `${script.mode}:${script.content}`;
@@ -224,6 +185,7 @@ function applyCustomScripts(scripts) {
         }
     }
 }
+
 let _keystrokeHost = null;
 let _keystrokeKeyMap = null;
 function _buildKeyMap(shadow) {
@@ -232,7 +194,8 @@ function _buildKeyMap(shadow) {
         _keystrokeKeyMap.set(el.getAttribute('data-code'), el);
     });
 }
-async function applyKeystrokeOverlay(enabled, editMode, xOffset, yOffset, scale, removedKeys) {
+
+function applyKeystrokeOverlay(enabled, editMode, xOffset, yOffset, scale, removedKeys) {
     if (!enabled) {
         _keystrokeHost?.remove();
         _keystrokeHost = null;
@@ -240,23 +203,14 @@ async function applyKeystrokeOverlay(enabled, editMode, xOffset, yOffset, scale,
         return;
     }
     if (!_keystrokeHost) {
-        const overlayHtmlPath = path.join(__dirname, 'assets', 'html', 'keystrokeOverlay.html');
-        const fontPath = path.join(__dirname, 'assets', 'font', 'forza.ttf');
-        const overlayHtml = getAssetSync(overlayHtmlPath);
+        const overlayHtml = getAssetSync(path.join(__dirname, 'assets', 'html', 'keystrokeOverlay.html'));
         if (!overlayHtml) return;
-        if (!_fontBlobUrl) {
-            try {
-                const fontBytes = fs.readFileSync(fontPath);
-                const blob = new Blob([fontBytes], { type: 'font/ttf' });
-                _fontBlobUrl = URL.createObjectURL(blob);
-            } catch (e) { console.error('Failed to create font blob URL:', e); }
-        }
+        const fontUrl = getFontBlobUrl();
+
         _keystrokeHost = Object.assign(document.createElement('div'), { id: 'celeste-keystroke-host' });
         _keystrokeHost.style.cssText = 'position:fixed;z-index:99998;pointer-events:none;top:0;left:0;';
         const shadow = _keystrokeHost.attachShadow({ mode: 'open' });
-        const fontFaceCSS = _fontBlobUrl
-            ? `@font-face { font-family: 'forza'; src: url('${_fontBlobUrl}') format('truetype'); }`
-            : '';
+        const fontFaceCSS = fontUrl ? `@font-face { font-family: 'forza'; src: url('${fontUrl}') format('truetype'); }` : '';
         const baseStyle = document.createElement('style');
         baseStyle.textContent = `${fontFaceCSS}
             :host { all: initial; }
@@ -265,11 +219,13 @@ async function applyKeystrokeOverlay(enabled, editMode, xOffset, yOffset, scale,
             #nlc-overlay-wrapper.edit-mode { pointer-events: all; cursor: default; }
             .nlc-key-default.nlc-key-active { color: black !important; background: white !important; border-color: white !important; }`;
         shadow.appendChild(baseStyle);
+
         const wrapper = document.createElement('div');
         wrapper.id = 'nlc-overlay-wrapper';
         wrapper.innerHTML = overlayHtml;
         shadow.appendChild(wrapper);
         _buildKeyMap(shadow);
+
         wrapper.querySelector('#keys-overlay')?.addEventListener('click', e => {
             const wrap = shadow.getElementById('nlc-overlay-wrapper');
             if (!wrap?.classList.contains('edit-mode')) return;
@@ -290,20 +246,22 @@ async function applyKeystrokeOverlay(enabled, editMode, xOffset, yOffset, scale,
         });
         document.body.appendChild(_keystrokeHost);
     }
+
     const shadow = _keystrokeHost.shadowRoot;
     const wrapper = shadow.getElementById('nlc-overlay-wrapper');
     const keysOverlay = shadow.getElementById('keys-overlay');
     if (!wrapper || !keysOverlay) return;
+
     wrapper.style.top = `${Number(yOffset) || 0}px`;
     wrapper.style.left = `${Number(xOffset) || 0}px`;
     const scaleVal = (Number(scale) || 100) / 100;
     keysOverlay.style.transform = scaleVal !== 1 ? `scale(${scaleVal})` : '';
     keysOverlay.style.transformOrigin = 'top left';
+
     const rKeys = removedKeys || [];
+    const keyMap = _keystrokeKeyMap || new Map();
     if (_keystrokeKeyMap) {
-        _keystrokeKeyMap.forEach((el, code) => {
-            el.classList.toggle('nlc-key-disabled', rKeys.includes(code));
-        });
+        _keystrokeKeyMap.forEach((el, code) => el.classList.toggle('nlc-key-disabled', rKeys.includes(code)));
     } else {
         keysOverlay.querySelectorAll('.nlc-key-default[data-code]').forEach(el => {
             el.classList.toggle('nlc-key-disabled', rKeys.includes(el.getAttribute('data-code')));
@@ -312,13 +270,16 @@ async function applyKeystrokeOverlay(enabled, editMode, xOffset, yOffset, scale,
     keysOverlay.classList.toggle('edit', !!editMode);
     wrapper.classList.toggle('edit-mode', !!editMode);
 }
+
 function highlightKeystrokeKey(code, active) {
     _keystrokeKeyMap?.get(code)?.classList.toggle('nlc-key-active', active);
 }
+
 const KEYSTROKE_KEYS = new Set([
     'keystroke overlay', 'keystroke overlay edit mode',
     'keystroke overlay x', 'keystroke overlay y', 'keystroke overlay scale', 'keystroke overlay removed keys'
 ]);
+
 function reapplyKeystroke() {
     applyKeystrokeOverlay(
         currentSettings['keystroke overlay'],
@@ -329,6 +290,7 @@ function reapplyKeystroke() {
         currentSettings['keystroke overlay removed keys']
     );
 }
+
 function applyAllSettings(s) {
     applyTheme(s['celeste theme']);
     applyCustomStyles(s['custom css list']);
@@ -345,6 +307,7 @@ function applyAllSettings(s) {
         s['keystroke overlay removed keys']
     );
 }
+
 contextBridge.exposeInMainWorld('api', {
     getSettings: async () => {
         currentSettings = await ipcRenderer.invoke('get-settings');
@@ -361,17 +324,17 @@ contextBridge.exposeInMainWorld('api', {
     updateSetting: (key, value) => {
         if (_SENSITIVE_KEYS.has(key) && !_menuOpen) return Promise.resolve();
         currentSettings[key] = value;
-        if (key === 'celeste theme') applyTheme(currentSettings['celeste theme']);
-        if (key === 'custom css list') applyCustomStyles(currentSettings['custom css list']);
-        if (key === 'in-game ui opacity' || key === 'in-game ui scale')
+        if (key === 'celeste theme') applyTheme(value);
+        else if (key === 'custom css list') applyCustomStyles(value);
+        else if (key === 'in-game ui opacity' || key === 'in-game ui scale')
             applyUIScaleAndOpacity(currentSettings['in-game ui opacity'], currentSettings['in-game ui scale']);
-        if (key === 'game chat') applyGameChat(currentSettings['game chat']);
-        if (key === 'custom hitmarker' || key === 'custom kill icon')
+        else if (key === 'game chat') applyGameChat(value);
+        else if (key === 'custom hitmarker' || key === 'custom kill icon')
             applyGameCustomizations(currentSettings['custom hitmarker'], currentSettings['custom kill icon']);
-        if (key === 'ui animations') applyUIAnimations(currentSettings['ui animations']);
-        if (key === 'show tab info') applyTabInfo(currentSettings['show tab info']);
-        if (key === 'skip loading screen') applySkipLoadingScreen(currentSettings['skip loading screen']);
-        if (KEYSTROKE_KEYS.has(key)) reapplyKeystroke();
+        else if (key === 'ui animations') applyUIAnimations(value);
+        else if (key === 'show tab info') applyTabInfo(value);
+        else if (key === 'skip loading screen') applySkipLoadingScreen(value);
+        else if (KEYSTROKE_KEYS.has(key)) reapplyKeystroke();
         return ipcRenderer.invoke('update-setting', key, value);
     },
     updateSettingsBulk: async (newSettings) => {
@@ -385,39 +348,33 @@ contextBridge.exposeInMainWorld('api', {
     actionZoom: dir => ipcRenderer.send('action-zoom', dir),
     actionOpenSwapperFolder: () => ipcRenderer.send('action-open-swapper-folder'),
     actionOpenIncognito: (useCurrentSettings = false) => ipcRenderer.send('action-open-incognito', useCurrentSettings),
-    buildCombo: (ctrlKey, shiftKey, altKey, code) => buildCombo({ ctrlKey, shiftKey, altKey, code })
+    buildCombo: (ctrlKey, shiftKey, altKey, code) => buildCombo({ ctrlKey, shiftKey, altKey, code }),
+    platform: process.platform
 });
+
 window.addEventListener('DOMContentLoaded', async () => {
     try {
         const s = await ipcRenderer.invoke('get-settings');
         currentSettings = s;
-
         applyAllSettings(s);
         applyCustomScripts(s['custom scripts']);
 
-        const cssPath = path.join(__dirname, 'styles', 'menu.css');
-        const fontPath = path.join(__dirname, 'assets', 'font', 'forza.ttf');
-        const htmlPath = path.join(__dirname, 'menu.html');
-        const jsPath = path.join(__dirname, 'components', 'menu.js');
-        const [cssContentRaw, htmlContent, jsContent, fontBytes] = await Promise.all([
-            fs.promises.readFile(cssPath, 'utf8').catch(() => null),
-            fs.promises.readFile(htmlPath, 'utf8').catch(() => null),
-            fs.promises.readFile(jsPath, 'utf8').catch(() => null),
-            fs.promises.readFile(fontPath).catch(() => null),
+        const fontUrl = getFontBlobUrl();
+        const [cssContentRaw, htmlContent, jsContent] = await Promise.all([
+            fs.promises.readFile(path.join(__dirname, 'styles', 'menu.css'), 'utf8').catch(() => null),
+            fs.promises.readFile(path.join(__dirname, 'menu.html'), 'utf8').catch(() => null),
+            fs.promises.readFile(path.join(__dirname, 'components', 'menu.js'), 'utf8').catch(() => null),
         ]);
-        if (!_fontBlobUrl && fontBytes) {
-            const blob = new Blob([fontBytes], { type: 'font/ttf' });
-            _fontBlobUrl = URL.createObjectURL(blob);
-        }
+
         let styleEl = null;
         if (cssContentRaw) {
             let cssContent = cssContentRaw;
-            if (_fontBlobUrl) {
-                cssContent = cssContent.replace('../assets/font/forza.ttf', _fontBlobUrl);
+            if (fontUrl) {
+                cssContent = cssContent.replace('../assets/font/forza.ttf', fontUrl);
                 if (!document.getElementById('celeste-global-font')) {
                     const globalFontEl = document.createElement('style');
                     globalFontEl.id = 'celeste-global-font';
-                    globalFontEl.textContent = `@font-face { font-family: 'forza'; src: url('${_fontBlobUrl}') format('truetype'); }`;
+                    globalFontEl.textContent = `@font-face { font-family: 'forza'; src: url('${fontUrl}') format('truetype'); }`;
                     document.head.appendChild(globalFontEl);
                 }
             }
@@ -435,12 +392,12 @@ window.addEventListener('DOMContentLoaded', async () => {
         wrapper.innerHTML = htmlContent;
         shadowRoot.appendChild(wrapper);
         document.body.appendChild(host);
+
         if (jsContent) {
             const scriptEl = document.createElement('script');
             scriptEl.textContent = `(function(){const root=document.getElementById('celeste-menu-host').shadowRoot;\n${jsContent}\n})();`;
             document.body.appendChild(scriptEl);
         }
-
 
         let _menuOverlay = null;
         const getMenuOverlay = () => {
@@ -449,44 +406,41 @@ window.addEventListener('DOMContentLoaded', async () => {
             }
             return _menuOverlay;
         };
+
         document.addEventListener('keydown', e => {
             highlightKeystrokeKey(e.code, true);
             if (e.repeat) return;
             const ae = document.activeElement;
             if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA') && !ae.classList.contains('setting-input')) return;
+
             const combo = buildCombo(e);
             const kb = currentSettings.keybinds || {};
-            if (combo === kb['toggle menu']) {
-                const menu = getMenuOverlay();
-                if (menu) {
-                    const opening = menu.style.display === 'none';
-                    menu.style.display = opening ? 'flex' : 'none';
-                    _menuOpen = opening;
-                }
-            } else if (combo === kb['copy url']) {
-                navigator.clipboard.writeText(window.location.href);
-            } else if (combo === kb['return main page']) {
-                window.location.href = 'https://kirka.io';
-            } else if (combo === kb['reload']) {
-                location.reload();
-            } else if (combo === kb['fullscreen']) {
-                ipcRenderer.send('action-fullscreen');
-            } else if (combo === kb['devtools']) {
-                ipcRenderer.send('action-devtools');
-            } else if (combo === kb['quick restart']) {
-                ipcRenderer.send('action-quick-restart');
-            } else if (combo === (kb['open incognito'] || 'Ctrl+Shift+KeyN')) {
-                ipcRenderer.send('action-open-incognito', !!currentSettings['incognito use current settings']);
-            } else if (combo === kb['zoom in']) {
-                ipcRenderer.send('action-zoom', 'in');
-            } else if (combo === kb['zoom out']) {
-                ipcRenderer.send('action-zoom', 'out');
-            } else if (combo === kb['zoom reset']) {
-                ipcRenderer.send('action-zoom', 'reset');
-            }
-        });
-        document.addEventListener('keyup', e => highlightKeystrokeKey(e.code, false));
 
+            const actions = {
+                [kb['toggle menu']]: () => {
+                    const menu = getMenuOverlay();
+                    if (menu) {
+                        const opening = menu.style.display === 'none';
+                        menu.style.display = opening ? 'flex' : 'none';
+                        _menuOpen = opening;
+                    }
+                },
+                [kb['copy url']]: () => navigator.clipboard.writeText(window.location.href),
+                [kb['return main page']]: () => { window.location.href = 'https://kirka.io'; },
+                [kb['reload']]: () => location.reload(),
+                [kb['fullscreen']]: () => ipcRenderer.send('action-fullscreen'),
+                [kb['devtools']]: () => ipcRenderer.send('action-devtools'),
+                [kb['quick restart']]: () => ipcRenderer.send('action-quick-restart'),
+                [kb['open incognito'] || 'Ctrl+Shift+KeyN']: () => ipcRenderer.send('action-open-incognito', !!currentSettings['incognito use current settings']),
+                [kb['zoom in']]: () => ipcRenderer.send('action-zoom', 'in'),
+                [kb['zoom out']]: () => ipcRenderer.send('action-zoom', 'out'),
+                [kb['zoom reset']]: () => ipcRenderer.send('action-zoom', 'reset'),
+            };
+
+            actions[combo]?.();
+        });
+
+        document.addEventListener('keyup', e => highlightKeystrokeKey(e.code, false));
         ipcRenderer.send('loading-done');
     } catch (e) {
         console.error('Failed to inject Celeste menu:', e);
