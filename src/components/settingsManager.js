@@ -63,10 +63,12 @@ class SettingsManager {
         }
 
         if (process.platform === 'win32') {
-            exec(
-                `reg add "HKCU\\Software\\Microsoft\\DirectX\\UserGpuPreferences" /v "${process.execPath}" /t REG_SZ /d "GpuPreference=2;" /f`,
-                err => { if (err) console.error('Failed to set high performance GPU preference:', err); }
-            );
+            setImmediate(() => {
+                exec(
+                    `reg add "HKCU\\Software\\Microsoft\\DirectX\\UserGpuPreferences" /v "${process.execPath}" /t REG_SZ /d "GpuPreference=2;" /f`,
+                    err => { if (err) console.error('Failed to set high performance GPU preference:', err); }
+                );
+            });
         }
 
         const angleBackend = this.settings['angle backend'] || 'default';

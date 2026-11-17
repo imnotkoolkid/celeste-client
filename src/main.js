@@ -1,5 +1,4 @@
 const { app, BrowserWindow, Menu, ipcMain, net, protocol, shell } = require('electron');
-const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -22,11 +21,11 @@ protocol.registerSchemesAsPrivileged([
   { scheme: 'celeste', privileges: { secure: true, standard: true, supportFetchAPI: true, corsEnabled: true } }
 ]);
 settingsManager.init();
-drpc.init(settingsManager.settings);
 
 let mainWindow;
 let splashWindow;
 let _updateDownloaded = false;
+let _availableUpdate = null;
 const _incognitoSettings = new Map();
 
 function isIncognito(wc) {
@@ -80,16 +79,45 @@ function boostProcessPriorities() {
   } catch (_) {}
 }
 
-function configureUpdater() {
-  autoUpdater.autoDownload = true;
-  autoUpdater.autoInstallOnAppQuit = true;
-  autoUpdater.logger = null;
+function configureAndCheckUpdater() {
+  try {
+    const { autoUpdater } = require('electron-updater');
+    autoUpdater.autoDownload = false;
+    autoUpdater.autoInstallOnAppQuit = true;
+    autoUpdater.logger = null;
 
-  autoUpdater.on('update-downloaded', () => {
-    _updateDownloaded = true;
-    autoUpdater.quitAndInstall(true, true);
-  });
-  autoUpdater.on('error', () => {});
+    autoUpdater.on('update-available', info => {
+      _availableUpdate = {
+        available: true,
+        version: info?.version || ''
+      };
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('update-status-changed', _availableUpdate);
+      }
+    });
+
+    autoUpdater.on('download-progress', progress => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('update-download-progress', Math.round(progress?.percent || 0));
+      }
+    });
+
+    autoUpdater.on('update-downloaded', () => {
+      _updateDownloaded = true;
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('update-downloaded');
+      }
+      autoUpdater.quitAndInstall(true, true);
+    });
+
+    autoUpdater.on('error', err => {
+      console.log('Update check error:', err?.message || err);
+    });
+
+    autoUpdater.checkForUpdates().catch(() => {});
+  } catch (err) {
+    console.error('Updater configuration error:', err);
+  }
 }
 
 function splashProgress(step) {
@@ -172,6 +200,7 @@ function createWindow() {
     if (!settingsManager.get('start fullscreen')) mainWindow.maximize();
     mainWindow.show();
     closeSplash();
+    drpc.init(settingsManager.settings);
   };
 
   ipcMain.once('loading-done', showMainWindow);
@@ -199,17 +228,26 @@ app.whenReady().then(async () => {
 
   await initResourceSwapper(settingsManager.get('swapper enabled') !== false);
   createSplash();
-  configureUpdater();
-
-  if (app.isPackaged) {
-    const updateCheck = autoUpdater.checkForUpdates().catch(() => {});
-    await Promise.race([updateCheck, new Promise(r => setTimeout(r, 5000))]);
-    if (!_updateDownloaded) createWindow();
-  } else {
-    createWindow();
-  }
+  createWindow();
 
   boostProcessPriorities();
+
+  if (app.isPackaged) {
+    setTimeout(configureAndCheckUpdater, 3000);
+  }
+
+  ipcMain.handle('get-update-status', () => _availableUpdate || { available: false, version: '' });
+
+  ipcMain.on('action-install-update', () => {
+    try {
+      const { autoUpdater } = require('electron-updater');
+      autoUpdater.downloadUpdate().catch(err => {
+        console.error('Failed to download update:', err);
+      });
+    } catch (err) {
+      console.error('Install update error:', err);
+    }
+  });
 
   ipcMain.on('action-open-incognito', (_, useCurrentSettings) => createIncognitoWindow(useCurrentSettings));
 

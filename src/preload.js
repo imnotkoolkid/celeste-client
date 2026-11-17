@@ -349,22 +349,22 @@ contextBridge.exposeInMainWorld('api', {
     actionOpenSwapperFolder: () => ipcRenderer.send('action-open-swapper-folder'),
     actionOpenIncognito: (useCurrentSettings = false) => ipcRenderer.send('action-open-incognito', useCurrentSettings),
     buildCombo: (ctrlKey, shiftKey, altKey, code) => buildCombo({ ctrlKey, shiftKey, altKey, code }),
-    platform: process.platform
+    platform: process.platform,
+    getUpdateStatus: () => ipcRenderer.invoke('get-update-status'),
+    installUpdate: () => ipcRenderer.send('action-install-update'),
+    onUpdateStatusChanged: cb => ipcRenderer.on('update-status-changed', (_, info) => cb(info)),
+    onUpdateDownloadProgress: cb => ipcRenderer.on('update-download-progress', (_, percent) => cb(percent)),
+    onUpdateDownloaded: cb => ipcRenderer.on('update-downloaded', () => cb())
 });
 
-window.addEventListener('DOMContentLoaded', async () => {
-    try {
-        const s = await ipcRenderer.invoke('get-settings');
-        currentSettings = s;
-        applyAllSettings(s);
-        applyCustomScripts(s['custom scripts']);
-
-        const fontUrl = getFontBlobUrl();
-        const [cssContentRaw, htmlContent, jsContent] = await Promise.all([
-            fs.promises.readFile(path.join(__dirname, 'styles', 'menu.css'), 'utf8').catch(() => null),
-            fs.promises.readFile(path.join(__dirname, 'menu.html'), 'utf8').catch(() => null),
-            fs.promises.readFile(path.join(__dirname, 'components', 'menu.js'), 'utf8').catch(() => null),
-        ]);
+function loadCelesteMenu() {
+    const fontUrl = getFontBlobUrl();
+    Promise.all([
+        fs.promises.readFile(path.join(__dirname, 'styles', 'menu.css'), 'utf8').catch(() => null),
+        fs.promises.readFile(path.join(__dirname, 'menu.html'), 'utf8').catch(() => null),
+        fs.promises.readFile(path.join(__dirname, 'components', 'menu.js'), 'utf8').catch(() => null),
+    ]).then(([cssContentRaw, htmlContent, jsContent]) => {
+        if (!htmlContent) return;
 
         let styleEl = null;
         if (cssContentRaw) {
@@ -381,7 +381,6 @@ window.addEventListener('DOMContentLoaded', async () => {
             styleEl = document.createElement('style');
             styleEl.textContent = cssContent;
         }
-        if (!htmlContent) return;
 
         const host = document.createElement('div');
         host.id = 'celeste-menu-host';
@@ -398,16 +397,32 @@ window.addEventListener('DOMContentLoaded', async () => {
             scriptEl.textContent = `(function(){const root=document.getElementById('celeste-menu-host').shadowRoot;\n${jsContent}\n})();`;
             document.body.appendChild(scriptEl);
         }
+    }).catch(err => console.error('Failed to load Celeste menu:', err));
+}
 
-        let _menuOverlay = null;
-        const getMenuOverlay = () => {
-            if (!_menuOverlay) {
-                _menuOverlay = document.getElementById('celeste-menu-host')?.shadowRoot?.getElementById('celeste-menu-overlay');
-            }
-            return _menuOverlay;
-        };
+window.addEventListener('DOMContentLoaded', async () => {
+    try {
+        const s = await ipcRenderer.invoke('get-settings');
+        currentSettings = s;
+        applyAllSettings(s);
+        applyCustomScripts(s['custom scripts']);
 
-        document.addEventListener('keydown', e => {
+        ipcRenderer.send('loading-done');
+        loadCelesteMenu();
+    } catch (e) {
+        console.error('Failed to initialize settings:', e);
+        ipcRenderer.send('loading-done');
+    }
+
+    let _menuOverlay = null;
+    const getMenuOverlay = () => {
+        if (!_menuOverlay) {
+            _menuOverlay = document.getElementById('celeste-menu-host')?.shadowRoot?.getElementById('celeste-menu-overlay');
+        }
+        return _menuOverlay;
+    };
+
+    document.addEventListener('keydown', e => {
             highlightKeystrokeKey(e.code, true);
             if (e.repeat) return;
             const ae = document.activeElement;
@@ -441,9 +456,4 @@ window.addEventListener('DOMContentLoaded', async () => {
         });
 
         document.addEventListener('keyup', e => highlightKeystrokeKey(e.code, false));
-        ipcRenderer.send('loading-done');
-    } catch (e) {
-        console.error('Failed to inject Celeste menu:', e);
-        ipcRenderer.send('loading-done');
-    }
 });

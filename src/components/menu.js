@@ -435,4 +435,40 @@ window.api.getSettings().then(settings => {
             }, 80);
         });
     }
+
+    const updateItem = $('item-update-available');
+    const updateBtn = $('btn-install-update');
+    const updateVerLabel = $('update-version-label');
+
+    const showUpdateUI = (info) => {
+        if (!updateItem) return;
+        if (info && info.available) {
+            updateItem.style.display = 'flex';
+            if (info.version && updateVerLabel) {
+                updateVerLabel.textContent = `Version ${info.version} is ready`;
+            }
+        } else {
+            updateItem.style.display = 'none';
+        }
+    };
+
+    window.api.getUpdateStatus?.().then(showUpdateUI);
+    window.api.onUpdateStatusChanged?.(showUpdateUI);
+
+    window.api.onUpdateDownloadProgress?.(percent => {
+        if (updateBtn) {
+            updateBtn.textContent = `Downloading ${percent}%`;
+            updateBtn.disabled = true;
+        }
+    });
+
+    window.api.onUpdateDownloaded?.(() => {
+        if (updateBtn) updateBtn.textContent = 'Restarting...';
+    });
+
+    updateBtn?.addEventListener('click', () => {
+        updateBtn.disabled = true;
+        updateBtn.textContent = 'Downloading...';
+        window.api.installUpdate?.();
+    });
 }).catch(err => console.error('Failed to load settings:', err));
