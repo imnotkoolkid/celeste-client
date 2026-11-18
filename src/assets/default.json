@@ -38,5 +38,14 @@
     "zoom reset": "Digit0"
   },
   "custom scripts": [],
-  "incognito use current settings": false
+  "incognito use current settings": false,
+  "incognito always mask ip": false,
+  "mask ip": false,
+  "proxy mode": "manual",
+  "proxy protocol": "http",
+  "proxy host": "",
+  "proxy port": "",
+  "proxy username": "",
+  "proxy password": "",
+  "proxy url": ""
 }

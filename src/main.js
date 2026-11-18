@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, ipcMain, net, protocol, shell } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, net, protocol, shell, session } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -28,14 +28,221 @@ let _updateDownloaded = false;
 let _availableUpdate = null;
 const _incognitoSettings = new Map();
 
-function isIncognito(wc) {
-  return _incognitoSettings.has(wc.id);
+let _proxyConnectionFailed = false;
+const _incognitoProxyFailed = new Map();
+const _incognitoSessions = new Map(); 
+
+function safeDecode(val) {
+  if (!val) return '';
+  try {
+    return decodeURIComponent(val);
+  } catch (_) {
+    return val;
+  }
 }
 
-function createIncognitoWindow(useCurrentSettings = false) {
+function parseProxyUrl(raw) {
+  if (!raw || typeof raw !== 'string') return null;
+  let str = raw.trim().replace(/^["']|["']$/g, '');
+  if (!str) return null;
+
+  try {
+    let protocol = 'http';
+    const protoMatch = str.match(/^([a-zA-Z0-9]+):\/\//);
+    if (protoMatch) {
+      protocol = protoMatch[1].toLowerCase();
+      str = str.slice(protoMatch[0].length).trim();
+    }
+
+    let host = '';
+    let port = '';
+    let username = '';
+    let password = '';
+
+    const hpMatch = str.match(/^(\[[^\]]+\]|[^:/@]+):(\d{1,5}):([^:]+):(.*)$/);
+    if (hpMatch) {
+      host = hpMatch[1];
+      port = hpMatch[2];
+      username = safeDecode(hpMatch[3]);
+      password = safeDecode(hpMatch[4]);
+    } else if (str.includes('@')) {
+      const atIdx = str.lastIndexOf('@');
+      const authPart = str.slice(0, atIdx);
+      const destPart = str.slice(atIdx + 1).replace(/\/.*$/, '');
+
+      const colonAuth = authPart.indexOf(':');
+      if (colonAuth !== -1) {
+        username = safeDecode(authPart.slice(0, colonAuth));
+        password = safeDecode(authPart.slice(colonAuth + 1));
+      } else {
+        username = safeDecode(authPart);
+      }
+
+      const ipv6Match = destPart.match(/^\[([^\]]+)\](?::(\d+))?$/);
+      if (ipv6Match) {
+        host = `[${ipv6Match[1]}]`;
+        port = ipv6Match[2] || '';
+      } else {
+        const colonDest = destPart.lastIndexOf(':');
+        if (colonDest !== -1) {
+          host = destPart.slice(0, colonDest);
+          port = destPart.slice(colonDest + 1);
+        } else {
+          host = destPart;
+        }
+      }
+    } else {
+      str = str.replace(/\/.*$/, '');
+      const ipv6Match = str.match(/^\[([^\]]+)\](?::(\d+))?(?::([^:]+):(.*))?$/);
+      if (ipv6Match) {
+        host = `[${ipv6Match[1]}]`;
+        port = ipv6Match[2] || '';
+        username = ipv6Match[3] ? safeDecode(ipv6Match[3]) : '';
+        password = ipv6Match[4] ? safeDecode(ipv6Match[4]) : '';
+      } else {
+        const parts = str.split(':');
+        if (parts.length >= 4) {
+          const portCandidate = parseInt(parts[1], 10);
+          if (!isNaN(portCandidate) && portCandidate >= 1 && portCandidate <= 65535 && /^\d+$/.test(parts[1])) {
+            host = parts[0];
+            port = parts[1];
+            username = safeDecode(parts[2]);
+            password = safeDecode(parts.slice(3).join(':'));
+          } else {
+            return null;
+          }
+        } else if (parts.length === 2) {
+          host = parts[0];
+          port = parts[1];
+        } else {
+          return null;
+        }
+      }
+    }
+
+    host = host.trim();
+    if (!host) return null;
+
+    const portNum = parseInt(port, 10);
+    if (isNaN(portNum) || portNum < 1 || portNum > 65535 || !/^\d+$/.test(port)) {
+      return null;
+    }
+    port = String(portNum);
+
+    const proxyRules = (protocol.startsWith('socks') || protocol === 'https')
+      ? `${protocol}://${host}:${port}`
+      : `${host}:${port}`;
+
+    return {
+      proxyRules,
+      protocol,
+      host,
+      port,
+      username: username ? username.trim() : '',
+      password: password || ''
+    };
+  } catch (e) {
+    console.error('Failed to parse proxy URL:', e);
+    return null;
+  }
+}
+
+function getManualProxyConfig(settings) {
+  if (!settings) return null;
+  let host = (settings['proxy host'] || '').trim().replace(/^[a-zA-Z0-9]+:\/\//, '').replace(/\/.*$/, '');
+  let port = String(settings['proxy port'] || '').trim();
+  const protocol = (settings['proxy protocol'] || 'http').toLowerCase();
+  const username = (settings['proxy username'] || '').trim();
+  const password = settings['proxy password'] || '';
+
+  if (!port && host.includes(':') && !host.startsWith('[')) {
+    const pIdx = host.lastIndexOf(':');
+    port = host.slice(pIdx + 1);
+    host = host.slice(0, pIdx);
+  }
+
+  if (!host) return null;
+  const portNum = parseInt(port, 10);
+  if (isNaN(portNum) || portNum < 1 || portNum > 65535 || !/^\d+$/.test(port)) return null;
+
+  const proxyRules = (protocol.startsWith('socks') || protocol === 'https')
+    ? `${protocol}://${host}:${portNum}`
+    : `${host}:${portNum}`;
+
+  return {
+    proxyRules,
+    protocol,
+    host,
+    port: String(portNum),
+    username,
+    password
+  };
+}
+
+function getUrlProxyConfig(settings) {
+  if (!settings) return null;
+  const proxyUrl = settings['proxy url'] || '';
+  return parseProxyUrl(proxyUrl);
+}
+
+function getProxyConfig(settings) {
+  if (!settings) return null;
+  const mode = settings['proxy mode'] || 'manual';
+  return mode === 'url' ? getUrlProxyConfig(settings) : getManualProxyConfig(settings);
+}
+
+async function applyProxySettings(settings) {
+  const enabled = !!settings['mask ip'];
+  const config = getProxyConfig(settings);
+
+  if (enabled && config) {
+    await session.defaultSession.setProxy({ proxyRules: config.proxyRules }).catch(err => console.error('Failed to set proxy:', err));
+  } else {
+    await session.defaultSession.setProxy({ proxyRules: '' }).catch(err => console.error('Failed to clear proxy:', err));
+  }
+}
+
+function isIncognito(wc) {
+  if (!wc || !wc.id) return false;
+  if (_incognitoSettings.has(wc.id)) return true;
+  for (const s of _incognitoSessions.values()) {
+    if (wc.session === s) return true;
+  }
+  return false;
+}
+
+function getSettingsForWebContents(wc) {
+  if (!wc || !wc.id) return settingsManager.settings;
+  if (_incognitoSettings.has(wc.id)) return _incognitoSettings.get(wc.id);
+  for (const [id, s] of _incognitoSessions.entries()) {
+    if (wc.session === s) return _incognitoSettings.get(id);
+  }
+  return settingsManager.settings;
+}
+
+async function createIncognitoWindow(useCurrentSettings = false) {
   const baseSettings = useCurrentSettings
-    ? { ...settingsManager.settings }
-    : { ...settingsManager.defaults };
+    ? JSON.parse(JSON.stringify(settingsManager.settings))
+    : JSON.parse(JSON.stringify(settingsManager.defaults));
+
+  const alwaysMask = !!settingsManager.get('incognito always mask ip');
+  if (alwaysMask) {
+    baseSettings['mask ip'] = true;
+    for (const k of ['proxy mode', 'proxy protocol', 'proxy host', 'proxy port', 'proxy username', 'proxy password', 'proxy url']) {
+      baseSettings[k] = settingsManager.get(k) ?? baseSettings[k];
+    }
+  }
+
+  const shouldMask = !!baseSettings['mask ip'];
+  const cfg = getProxyConfig(baseSettings);
+
+  const incognitoSession = session.fromPartition('incognito');
+
+  if (shouldMask && cfg) {
+    await incognitoSession.setProxy({ proxyRules: cfg.proxyRules }).catch(console.error);
+  } else {
+    await incognitoSession.setProxy({ proxyRules: '' }).catch(console.error);
+  }
 
   const incognitoWin = new BrowserWindow({
     minWidth: 900,
@@ -64,9 +271,46 @@ function createIncognitoWindow(useCurrentSettings = false) {
   });
 
   const wcId = incognitoWin.webContents.id;
-  _incognitoSettings.set(wcId, { ...baseSettings });
-  incognitoWin.loadURL('https://kirka.io/');
-  incognitoWin.on('closed', () => { _incognitoSettings.delete(wcId); });
+  _incognitoSettings.set(wcId, baseSettings);
+  _incognitoSessions.set(wcId, incognitoWin.webContents.session);
+  _incognitoProxyFailed.set(wcId, false);
+
+  const PROXY_ERR_CODES = new Set([-100, -101, -102, -104, -105, -107, -109, -111, -115, -118, -124, -127, -130, -136, -324, -336]);
+  const handleIncognitoLoadFailure = (event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+    if (!isMainFrame) return;
+    if (validatedURL && validatedURL.includes('blank.html')) return;
+    if (errorCode === -3) return;
+
+    const isProxyErr = (shouldMask && errorCode < 0) || PROXY_ERR_CODES.has(errorCode);
+
+    if (isProxyErr) {
+      _incognitoProxyFailed.set(wcId, true);
+      incognitoWin.loadFile(path.join(__dirname, 'assets', 'html', 'blank.html')).then(() => {
+        setTimeout(() => {
+          if (!incognitoWin.isDestroyed()) incognitoWin.webContents.send('show-proxy-error-popup');
+        }, 150);
+      }).catch(console.error);
+    }
+  };
+
+  incognitoWin.webContents.on('did-fail-load', handleIncognitoLoadFailure);
+
+  incognitoWin.on('closed', () => {
+    _incognitoSettings.delete(wcId);
+    _incognitoSessions.delete(wcId);
+    _incognitoProxyFailed.delete(wcId);
+  });
+
+  if (shouldMask && !cfg) {
+    _incognitoProxyFailed.set(wcId, true);
+    incognitoWin.loadFile(path.join(__dirname, 'assets', 'html', 'blank.html')).then(() => {
+      setTimeout(() => {
+        if (!incognitoWin.isDestroyed()) incognitoWin.webContents.send('show-proxy-error-popup');
+      }, 150);
+    }).catch(console.error);
+  } else {
+    incognitoWin.loadURL('https://kirka.io/');
+  }
 }
 
 function boostProcessPriorities() {
@@ -213,10 +457,49 @@ function createWindow() {
     return { action: 'deny' };
   });
 
-  mainWindow.loadURL('https://kirka.io/');
+  const shouldMask = !!settingsManager.get('mask ip');
+  const proxyCfg = getProxyConfig(settingsManager.settings);
+
+  if (shouldMask && !proxyCfg) {
+    _proxyConnectionFailed = true;
+    mainWindow.loadFile(path.join(__dirname, 'assets', 'html', 'blank.html')).then(() => {
+      showMainWindow();
+      setTimeout(() => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('show-proxy-error-popup');
+        }
+      }, 150);
+    }).catch(err => console.error('Failed to load blank.html:', err));
+  } else {
+    mainWindow.loadURL('https://kirka.io/');
+  }
   const onNavigate = (_, url) => drpc.setState(url);
   mainWindow.webContents.on('did-navigate', onNavigate);
   mainWindow.webContents.on('did-navigate-in-page', onNavigate);
+
+  const PROXY_ERR_CODES = new Set([-100, -101, -102, -104, -105, -107, -109, -111, -115, -118, -124, -127, -130, -136, -324, -336]);
+  const handleLoadFailure = (event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+    if (!isMainFrame) return;
+    if (validatedURL && validatedURL.includes('blank.html')) return;
+    if (errorCode === -3) return; 
+
+    const isProxyErr = (shouldMask && errorCode < 0) || PROXY_ERR_CODES.has(errorCode);
+
+    if (isProxyErr) {
+      _proxyConnectionFailed = true;
+      mainWindow.loadFile(path.join(__dirname, 'assets', 'html', 'blank.html')).then(() => {
+        showMainWindow();
+        setTimeout(() => {
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('show-proxy-error-popup');
+          }
+        }, 150);
+      }).catch(err => console.error('Failed to load blank.html:', err));
+    }
+  };
+
+  mainWindow.webContents.on('did-fail-load', handleLoadFailure);
+
   mainWindow.webContents.on('did-finish-load', () => {
     mainWindow.webContents.setZoomLevel(settingsManager.get('zoom level') || 0);
   });
@@ -227,6 +510,7 @@ app.whenReady().then(async () => {
   try { os.setPriority(os.constants.priority.PRIORITY_HIGH); } catch (_) {}
 
   await initResourceSwapper(settingsManager.get('swapper enabled') !== false);
+  await applyProxySettings(settingsManager.settings); 
   createSplash();
   createWindow();
 
@@ -253,31 +537,161 @@ app.whenReady().then(async () => {
 
   ipcMain.handle('get-settings', e => isIncognito(e.sender) ? _incognitoSettings.get(e.sender.id) : settingsManager.settings);
 
-  ipcMain.handle('update-setting', (e, key, value) => {
+  ipcMain.handle('update-setting', async (e, key, value) => {
     if (isIncognito(e.sender)) {
       const s = _incognitoSettings.get(e.sender.id);
-      if (s) s[key] = value;
+      if (s) {
+        s[key] = value;
+        if (key === 'mask ip' && !value) {
+          _incognitoProxyFailed.set(e.sender.id, false);
+        }
+        if (key === 'mask ip' || key.startsWith('proxy')) {
+          const cfg = getProxyConfig(s);
+          const ses = _incognitoSessions.get(e.sender.id);
+          if (ses) {
+            if (s['mask ip'] && cfg) {
+              await ses.setProxy({ proxyRules: cfg.proxyRules }).catch(console.error);
+            } else {
+              await ses.setProxy({ proxyRules: '' }).catch(console.error);
+            }
+          }
+        }
+      }
       return { success: true };
     }
     settingsManager.settings[key] = value;
     settingsManager.scheduleSave();
+    if (key === 'mask ip' && !value) {
+      _proxyConnectionFailed = false;
+    }
+    if (key === 'mask ip' || key.startsWith('proxy')) {
+      await applyProxySettings(settingsManager.settings);
+    }
     if (key === 'show rpc' || key === 'rpc match info') {
       drpc.init(settingsManager.settings);
     }
     return { success: true };
   });
 
-  ipcMain.handle('update-settings-bulk', (e, newSettings) => {
+  ipcMain.handle('update-settings-bulk', async (e, newSettings) => {
     const target = isIncognito(e.sender) ? _incognitoSettings.get(e.sender.id) : settingsManager.settings;
     if (target) {
       Object.keys(target).forEach(k => delete target[k]);
       Object.assign(target, newSettings);
       if (!isIncognito(e.sender)) {
         settingsManager.scheduleSave();
+        await applyProxySettings(settingsManager.settings);
         drpc.init(settingsManager.settings);
+      } else {
+        const cfg = getProxyConfig(target);
+        const ses = _incognitoSessions.get(e.sender.id);
+        if (ses) {
+          if (target['mask ip'] && cfg) {
+            await ses.setProxy({ proxyRules: cfg.proxyRules }).catch(console.error);
+          } else {
+            await ses.setProxy({ proxyRules: '' }).catch(console.error);
+          }
+        }
       }
     }
     return { success: true };
+  });
+
+  ipcMain.handle('action-apply-proxy', async (e, proxySettings) => {
+    const isIncog = isIncognito(e.sender);
+    const win = BrowserWindow.fromWebContents(e.sender);
+
+    if (isIncog) {
+      const s = _incognitoSettings.get(e.sender.id) || {};
+      if (proxySettings) Object.assign(s, proxySettings);
+      const config = getProxyConfig(s);
+      const ses = _incognitoSessions.get(e.sender.id);
+
+      if (!ses) return { success: false, error: 'Session not found' };
+
+      if (s['mask ip'] && !config) {
+        await ses.setProxy({ proxyRules: '' }).catch(console.error);
+        _incognitoProxyFailed.set(e.sender.id, true);
+        return { success: false, error: "Couldn't connect to proxy" };
+      }
+
+      if (s['mask ip'] && config) {
+        await ses.setProxy({ proxyRules: config.proxyRules }).catch(console.error);
+      } else {
+        await ses.setProxy({ proxyRules: '' }).catch(console.error);
+      }
+
+      _incognitoProxyFailed.set(e.sender.id, false);
+      if (win && !win.isDestroyed()) {
+        const curUrl = win.webContents.getURL() || '';
+        if (curUrl.includes('blank.html')) {
+          win.loadURL('https://kirka.io/');
+        }
+      }
+      return { success: true };
+    } else {
+      if (proxySettings) {
+        Object.assign(settingsManager.settings, proxySettings);
+        settingsManager.scheduleSave();
+      }
+      const config = getProxyConfig(settingsManager.settings);
+      if (settingsManager.settings['mask ip'] && !config) {
+        await applyProxySettings(settingsManager.settings);
+        _proxyConnectionFailed = true;
+        return { success: false, error: "Couldn't connect to proxy" };
+      }
+      await applyProxySettings(settingsManager.settings);
+      _proxyConnectionFailed = false;
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        const curUrl = mainWindow.webContents.getURL() || '';
+        if (curUrl.includes('blank.html')) {
+          mainWindow.loadURL('https://kirka.io/');
+        }
+      }
+      return { success: true };
+    }
+  });
+
+  ipcMain.handle('get-proxy-status', e => {
+    if (isIncognito(e.sender)) {
+      return { failed: !!_incognitoProxyFailed.get(e.sender.id) };
+    }
+    return { failed: _proxyConnectionFailed };
+  });
+
+  ipcMain.handle('action-proxy-normal-network', async e => {
+    const isIncog = isIncognito(e.sender);
+    const win = BrowserWindow.fromWebContents(e.sender);
+    if (isIncog) {
+      _incognitoProxyFailed.set(e.sender.id, false);
+      const s = _incognitoSettings.get(e.sender.id);
+      if (s) s['mask ip'] = false;
+      const ses = _incognitoSessions.get(e.sender.id);
+      if (ses) await ses.setProxy({ proxyRules: '' }).catch(console.error);
+      if (win && !win.isDestroyed()) {
+        win.loadURL('https://kirka.io/');
+      }
+    } else {
+      _proxyConnectionFailed = false;
+      settingsManager.settings['mask ip'] = false;
+      settingsManager.scheduleSave();
+      await applyProxySettings(settingsManager.settings);
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.loadURL('https://kirka.io/');
+      }
+    }
+    return { success: true };
+  });
+
+  ipcMain.on('action-quit', e => {
+    if (isIncognito(e.sender)) {
+      const win = BrowserWindow.fromWebContents(e.sender);
+      if (win && !win.isDestroyed()) {
+        win.close();
+      }
+    } else {
+      app.quit();
+    }
   });
 
   const MAX_CACHE = 256;
@@ -344,3 +758,40 @@ app.whenReady().then(async () => {
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 app.on('before-quit', () => drpc.destroy());
 app.on('activate', () => { if (!mainWindow) createWindow(); });
+
+app.on('login', (event, webContents, details, authInfo, callback) => {
+  if (authInfo.isProxy) {
+    const isIncog = isIncognito(webContents);
+    const targetSettings = getSettingsForWebContents(webContents);
+    const config = getProxyConfig(targetSettings);
+
+    if (!config || !config.username) {
+      console.warn('Proxy authentication requested but no credentials configured.');
+      if (isIncog && webContents && webContents.id) {
+        _incognitoProxyFailed.set(webContents.id, true);
+      } else {
+        _proxyConnectionFailed = true;
+      }
+      if (webContents && !webContents.isDestroyed()) {
+        webContents.send('show-proxy-error-popup');
+      }
+      return;
+    }
+
+    if (details && details.firstAuthAttempt === false) {
+      console.warn('Proxy authentication failed: invalid credentials rejected by server.');
+      if (isIncog && webContents && webContents.id) {
+        _incognitoProxyFailed.set(webContents.id, true);
+      } else {
+        _proxyConnectionFailed = true;
+      }
+      if (webContents && !webContents.isDestroyed()) {
+        webContents.send('show-proxy-error-popup');
+      }
+      return;
+    }
+
+    event.preventDefault();
+    callback(config.username, config.password || '');
+  }
+});

@@ -13,10 +13,12 @@
   --txt1: #d1d4de;
   --txt2: #9c9ba4;
   --txt-muted: #313039;
+  --txt-white: #ffffff;
   --accent: #698ff3;
   --accent-txt: #5a7ad8;
   --accent2: #ff3333;
   --accent3: #ffa500;
+  --accent3-hover: #ff9100;
   --br-rd: 4px;
   --br-rd2: 2px;
 }
@@ -185,7 +187,7 @@
 .custom-dropdown-trigger:hover,
 .custom-dropdown.open .custom-dropdown-trigger {
   background-color: var(--bg3);
-  color: #ffffff;
+  color: var(--txt-white);
 }
 
 .custom-dropdown .dropdown-arrow {
@@ -232,7 +234,7 @@
 
 .custom-dropdown-option.active {
   background-color: var(--accent);
-  color: #ffffff;
+  color: var(--txt-white);
   font-weight: 700;
 }
 
@@ -336,12 +338,12 @@ input[type=range]:focus { outline: none; }
 }
 
 .btn-box:hover { background-color: var(--bg3); color: var(--txt2); }
-.btn-box.active { background-color: var(--accent); color: #ffffff; }
+.btn-box.active { background-color: var(--accent); color: var(--txt-white); }
 
 #btn-reset-settings,
 .menu-action-btn {
   background: var(--accent);
-  color: white;
+  color: var(--txt-white);
   border: none; outline: none;
   padding: 6px 16px;
   border-radius: var(--br-rd);
@@ -356,7 +358,7 @@ input[type=range]:focus { outline: none; }
 
 #btn-reset-settings:hover { background: var(--accent2); }
 #btn-reset-settings.undo-mode { background: var(--accent3); }
-#btn-reset-settings.undo-mode:hover { background: #ff9100; }
+#btn-reset-settings.undo-mode:hover { background: var(--accent3-hover); }
 
 .plugin-dropdown-toggle { cursor: pointer; user-select: none; background-color: var(--bg1); }
 
@@ -419,4 +421,116 @@ input[type=range]:focus { outline: none; }
 
 .plugin-btn-remove:hover { filter: brightness(1.1); }
 .plugin-btn-remove.undo-mode { background: var(--accent3); }
-.plugin-btn-remove.undo-mode:hover { background: #ff9100; }
+.plugin-btn-remove.undo-mode:hover { background: var(--accent3-hover); }
+
+/* Toast / Modular Popup Notifications */
+#celeste-toast-container {
+  position: fixed;
+  top: 24px;
+  right: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  z-index: 999999;
+  pointer-events: none;
+}
+
+.celeste-toast {
+  pointer-events: auto;
+  min-width: 300px;
+  max-width: 420px;
+  background-color: var(--bg1);
+  border: 1px solid var(--bg3);
+  border-left: 4px solid var(--accent);
+  border-radius: var(--br-rd);
+  padding: 14px 18px;
+  box-shadow: 0 10px 24px var(--bg4);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transform: translateX(calc(100% + 40px));
+  opacity: 0;
+  transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s ease;
+}
+
+.celeste-toast.error {
+  border-left-color: var(--accent2);
+}
+
+.celeste-toast.slide-in {
+  transform: translateX(0);
+  opacity: 1;
+}
+
+.celeste-toast.slide-out {
+  transform: translateX(calc(100% + 40px));
+  opacity: 0;
+}
+
+.celeste-toast-header {
+  display: flex;
+  align-items: center;
+}
+
+.celeste-toast-title {
+  color: var(--txt1);
+  font-size: 0.9rem;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+
+.celeste-toast.error .celeste-toast-title {
+  color: var(--accent2);
+}
+
+.celeste-toast-message {
+  color: var(--txt2);
+  font-size: 0.8rem;
+  line-height: 1.4;
+  white-space: pre-line;
+}
+
+.celeste-toast-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+  flex-wrap: wrap;
+}
+
+.toast-action-btn {
+  border: none !important;
+  outline: none !important;
+  background-color: var(--bg3) !important;
+  color: var(--txt1) !important;
+  border-radius: var(--br-rd) !important;
+  padding: 6px 14px !important;
+  font-size: 0.75rem !important;
+  font-weight: 700 !important;
+  cursor: pointer !important;
+  letter-spacing: 0.4px !important;
+  text-transform: uppercase !important;
+  font-family: inherit !important;
+  box-shadow: none !important;
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  transition: background 0.15s ease, color 0.15s ease !important;
+}
+
+.toast-action-btn:hover {
+  background-color: var(--bg2) !important;
+  color: var(--txt1) !important;
+}
+
+.toast-action-btn.active {
+  background-color: var(--accent) !important;
+  color: var(--txt1) !important;
+}
+
+.toast-action-btn.active:hover {
+  background-color: var(--accent-txt) !important;
+}
+
+#proxy-manual-container .setting-item.sub-item,
+#proxy-url-container .setting-item.sub-item {
+  margin-left: 0;
+}

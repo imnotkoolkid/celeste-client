@@ -1,3 +1,4 @@
+<div id="celeste-toast-container"></div>
 <div id="celeste-menu-overlay" style="display: none;">
   <div class="celeste-menu">
     <div class="menu-tabs">
@@ -241,9 +242,64 @@
             <label class="toggle-switch"><input type="checkbox" id="toggle-incognito-current-settings"><span
                 class="slider"></span></label>
           </div>
+          <div class="setting-item sub-item">
+            <span class="setting-label">Always start with masked IP</span>
+            <label class="toggle-switch"><input type="checkbox" id="toggle-incognito-always-mask-ip"><span
+                class="slider"></span></label>
+          </div>
         </div>
 
 
+
+        <div class="setting-category" id="cat-proxy">
+          <div class="category-header">Proxy / Mask IP</div>
+          <div class="setting-item sub-item">
+            <span class="setting-label">Mask IP</span>
+            <label class="toggle-switch"><input type="checkbox" id="toggle-mask-ip"><span
+                class="slider"></span></label>
+          </div>
+          <div class="setting-item sub-item proxy-row" id="item-proxy-mode" style="display: none;">
+            <span class="setting-label">Mode</span>
+            <div class="button-group" id="proxy-mode-group">
+              <span class="btn-box active" data-val="manual">Manual</span>
+              <span class="btn-box" data-val="url">URL</span>
+            </div>
+          </div>
+
+          <div id="proxy-manual-container" class="proxy-row" style="display: none;">
+            <div class="setting-item sub-item">
+              <span class="setting-label">Protocol</span>
+              <div class="button-group" id="proxy-protocol-group">
+                <span class="btn-box active" data-val="http">HTTP</span>
+                <span class="btn-box" data-val="https">HTTPS</span>
+              </div>
+            </div>
+            <div class="setting-item sub-item">
+              <span class="setting-label">Host</span>
+              <input type="text" class="setting-input" id="input-proxy-host" placeholder="xxx.xxx.xxx.xxx or xyz.com">
+            </div>
+            <div class="setting-item sub-item">
+              <span class="setting-label">Port</span>
+              <input type="text" class="setting-input num-input" id="input-proxy-port" placeholder="xxxx">
+            </div>
+            <div class="setting-item sub-item">
+              <span class="setting-label">Username</span>
+              <input type="text" class="setting-input" id="input-proxy-username" placeholder="Optional if NOT required">
+            </div>
+            <div class="setting-item sub-item">
+              <span class="setting-label">Password</span>
+              <input type="password" class="setting-input" id="input-proxy-password" placeholder="Optional if NOT required">
+            </div>
+          </div>
+
+          <div id="proxy-url-container" class="proxy-row" style="display: none;">
+            <div class="setting-item sub-item" id="item-proxy-url">
+              <span class="setting-label">Proxy URL</span>
+              <input type="text" class="setting-input" id="input-proxy-url"
+                placeholder="user:pass@host:port or host:port:user:pass">
+            </div>
+          </div>
+        </div>
 
         <div class="setting-item">
           <span class="setting-label">Reset Settings</span>

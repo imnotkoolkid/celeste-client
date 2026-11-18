@@ -92,6 +92,10 @@ class SettingsManager {
                 Array.isArray(sw) ? app.commandLine.appendSwitch(...sw) : app.commandLine.appendSwitch(sw);
             }
         }
+
+        if (this.settings['mask ip'] || this.settings['incognito always mask ip']) {
+            app.commandLine.appendSwitch('force-webrtc-ip-handling-policy', 'disable_non_proxied_udp');
+        }
     }
     get(key) { return this.settings[key]; }
 }

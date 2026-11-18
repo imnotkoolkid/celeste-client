@@ -28,6 +28,116 @@ if (!window.api) return;
 window.api.getSettings().then(settings => {
     const $ = id => root.getElementById(id);
 
+    function showToast({ title, message, actions = [], duration = 2500, type = 'info' }) {
+        const container = $('celeste-toast-container');
+        if (!container) return;
+
+        const toast = document.createElement('div');
+        toast.className = `celeste-toast ${type}`;
+
+        const actionsHtml = actions.length
+            ? `<div class="celeste-toast-actions">` +
+              actions.map((act, i) => `<button class="toast-action-btn ${act.primary ? 'active' : ''}" data-idx="${i}">${act.label}</button>`).join('') +
+              `</div>`
+            : '';
+
+        toast.innerHTML = `
+            <div class="celeste-toast-header">
+                <span class="celeste-toast-title">${title || ''}</span>
+            </div>
+            ${message ? `<div class="celeste-toast-message">${message}</div>` : ''}
+            ${actionsHtml}
+        `;
+
+        container.appendChild(toast);
+        requestAnimationFrame(() => toast.classList.add('slide-in'));
+
+        let dismissTimer = null;
+        const dismiss = () => {
+            clearTimeout(dismissTimer);
+            toast.classList.remove('slide-in');
+            toast.classList.add('slide-out');
+            setTimeout(() => toast.remove(), 350);
+        };
+
+        if (actions.length) {
+            toast.querySelectorAll('.toast-action-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const act = actions[parseInt(btn.dataset.idx, 10)];
+                    act?.onClick?.();
+                    dismiss();
+                });
+            });
+        }
+
+        if (duration > 0) dismissTimer = setTimeout(dismiss, duration);
+        return { dismiss };
+    }
+
+    window.celesteToast = showToast;
+    window.api.onShowToast?.(opts => showToast(opts));
+
+    let _activeProxyErrorToast = null;
+    const showProxyErrorPopup = (msg) => {
+        if (_activeProxyErrorToast) return;
+        _activeProxyErrorToast = showToast({
+            title: "Couldn't connect to proxy",
+            message: msg || "Begin with normal network?",
+            type: 'error',
+            duration: null,
+            actions: [
+                {
+                    label: 'YES',
+                    primary: true,
+                    onClick: () => {
+                        _activeProxyErrorToast = null;
+                        const maskToggle = $('toggle-mask-ip');
+                        if (maskToggle) maskToggle.checked = false;
+                        settings['mask ip'] = false;
+                        window.api.updateSetting?.('mask ip', false);
+                        updateProxyVisibility();
+                        window.api.actionProxyNormalNetwork?.();
+                    }
+                },
+                {
+                    label: 'EXIT',
+                    onClick: () => {
+                        _activeProxyErrorToast = null;
+                        window.api.actionQuit?.();
+                    }
+                },
+                {
+                    label: 'TRY DIFF PROXY',
+                    onClick: () => {
+                        _activeProxyErrorToast = null;
+                        const overlay = $('celeste-menu-overlay');
+                        if (overlay) overlay.style.display = 'flex';
+                        switchTab('tab-client');
+                        $('cat-proxy')?.scrollIntoView({ behavior: 'smooth' });
+                        const isUrlMode = $('proxy-mode-group')?.querySelector('.active')?.dataset.val === 'url';
+                        (isUrlMode ? $('input-proxy-url') : $('input-proxy-host'))?.focus();
+                    }
+                }
+            ]
+        });
+    };
+
+    window.api.onShowProxyErrorPopup?.((msg) => showProxyErrorPopup(msg));
+    window.api.getProxyStatus?.().then(st => { if (st?.failed) showProxyErrorPopup(); });
+
+    const updateProxyVisibility = () => {
+        const isMaskOn = !!$('toggle-mask-ip')?.checked;
+        const display = isMaskOn ? 'flex' : 'none';
+        root.querySelectorAll('.proxy-row').forEach(r => r.style.display = display);
+        if (isMaskOn) {
+            const mode = $('proxy-mode-group')?.querySelector('.active')?.dataset.val || 'manual';
+            const manualContainer = $('proxy-manual-container');
+            const urlContainer = $('proxy-url-container');
+            if (manualContainer) manualContainer.style.display = mode === 'manual' ? 'block' : 'none';
+            if (urlContainer) urlContainer.style.display = mode === 'url' ? 'block' : 'none';
+        }
+    };
+
     const updateSliderBg = el => {
         const pct = ((el.value - (el.min || 0)) / ((el.max || 100) - (el.min || 0))) * 100;
         el.style.background = `linear-gradient(to right, var(--accent) ${pct}%, var(--bg1) ${pct}%)`;
@@ -53,32 +163,51 @@ window.api.getSettings().then(settings => {
             ['toggle-skip-loading-screen', 'skip loading screen'],
             ['toggle-swapper-enabled', 'swapper enabled'],
             ['toggle-incognito-current-settings', 'incognito use current settings'],
+            ['toggle-incognito-always-mask-ip', 'incognito always mask ip'],
+            ['toggle-mask-ip', 'mask ip'],
         ];
         for (const [id, key] of togglePairs) {
             const el = $(id);
             if (el) el.checked = !!(key === 'rpc match info' || key === 'ui animations' ? s[key] !== false : s[key]);
         }
 
-        const inputPairs = [
+        for (const [id, key] of [
             ['input-hitmarker', 'custom hitmarker'],
             ['input-killicon', 'custom kill icon'],
             ['input-keystroke-x', 'keystroke overlay x'],
             ['input-keystroke-y', 'keystroke overlay y'],
-        ];
-        for (const [id, key] of inputPairs) {
+        ]) {
             const el = $(id);
             if (el) el.value = s[key] ?? '';
         }
 
+        const proxyMode = s['proxy mode'] || 'manual';
+        $('proxy-mode-group')?.querySelectorAll('.btn-box').forEach(b => b.classList.toggle('active', b.dataset.val === proxyMode));
+
+        const proxyProto = s['proxy protocol'] || 'http';
+        $('proxy-protocol-group')?.querySelectorAll('.btn-box').forEach(b => b.classList.toggle('active', b.dataset.val === proxyProto));
+
+        for (const [id, key] of [
+            ['input-proxy-host', 'proxy host'],
+            ['input-proxy-port', 'proxy port'],
+            ['input-proxy-username', 'proxy username'],
+            ['input-proxy-password', 'proxy password'],
+            ['input-proxy-url', 'proxy url'],
+        ]) {
+            const el = $(id);
+            if (el) el.value = s[key] ?? '';
+        }
+
+        updateProxyVisibility();
+
         const chatMode = s['game chat'] || 'default';
         $('group-chat-mode')?.querySelectorAll('.btn-box').forEach(b => b.classList.toggle('active', b.dataset.val === chatMode));
 
-        const sliderPairs = [
+        for (const [iId, vId, key] of [
             ['input-ui-opacity', 'val-ui-opacity', 'in-game ui opacity'],
             ['input-ui-scale', 'val-ui-scale', 'in-game ui scale'],
             ['input-keystroke-scale', 'val-keystroke-scale', 'keystroke overlay scale'],
-        ];
-        for (const [iId, vId, key] of sliderPairs) {
+        ]) {
             const input = $(iId), valEl = $(vId);
             if (!input || !valEl) continue;
             input.value = s[key] ?? 100;
@@ -158,13 +287,63 @@ window.api.getSettings().then(settings => {
         ['toggle-skip-loading-screen', 'skip loading screen'],
         ['toggle-swapper-enabled', 'swapper enabled'],
         ['toggle-incognito-current-settings', 'incognito use current settings'],
+        ['toggle-incognito-always-mask-ip', 'incognito always mask ip'],
     ].forEach(([id, key]) => bindToggle(id, key));
+
+    $('toggle-mask-ip')?.addEventListener('change', e => {
+        const isChecked = e.target.checked;
+        settings['mask ip'] = isChecked;
+        window.api.updateSetting?.('mask ip', isChecked);
+        updateProxyVisibility();
+        saveAndApplyProxyDebounced(0);
+    });
 
     $('btn-open-swapper-folder')?.addEventListener('click', () => window.api.actionOpenSwapperFolder());
 
     const bindInput = (id, key) => $(id)?.addEventListener('input', e => window.api.updateSetting(key, e.target.value));
     bindInput('input-hitmarker', 'custom hitmarker');
     bindInput('input-killicon', 'custom kill icon');
+
+    let proxyDebounceTimer = null;
+    const saveAndApplyProxyDebounced = (delay = 700) => {
+        clearTimeout(proxyDebounceTimer);
+        proxyDebounceTimer = setTimeout(async () => {
+            const isMaskOn = !!$('toggle-mask-ip')?.checked;
+            const proxySettings = {
+                'mask ip': isMaskOn,
+                'proxy mode': $('proxy-mode-group')?.querySelector('.active')?.dataset.val || 'manual',
+                'proxy protocol': $('proxy-protocol-group')?.querySelector('.active')?.dataset.val || 'http',
+                'proxy host': $('input-proxy-host')?.value.trim() || '',
+                'proxy port': $('input-proxy-port')?.value.trim() || '',
+                'proxy username': $('input-proxy-username')?.value.trim() || '',
+                'proxy password': $('input-proxy-password')?.value || '',
+                'proxy url': $('input-proxy-url')?.value.trim() || ''
+            };
+            Object.assign(settings, proxySettings);
+            const res = await window.api.actionApplyProxy(proxySettings);
+            if (isMaskOn && res && !res.success) {
+                showProxyErrorPopup(res.error);
+            } else if (!isMaskOn || res?.success) {
+                if (_activeProxyErrorToast) {
+                    _activeProxyErrorToast.dismiss();
+                    _activeProxyErrorToast = null;
+                }
+            }
+        }, delay);
+    };
+
+    const bindProxyInput = (id, key) => {
+        const el = $(id);
+        if (!el) return;
+        el.addEventListener('input', e => { settings[key] = e.target.value; saveAndApplyProxyDebounced(700); });
+        el.addEventListener('change', e => { settings[key] = e.target.value; saveAndApplyProxyDebounced(0); });
+    };
+    bindProxyInput('input-proxy-host', 'proxy host');
+    bindProxyInput('input-proxy-port', 'proxy port');
+    $('input-proxy-port')?.addEventListener('input', e => { e.target.value = e.target.value.replace(/\D/g, ''); });
+    bindProxyInput('input-proxy-username', 'proxy username');
+    bindProxyInput('input-proxy-password', 'proxy password');
+    bindProxyInput('input-proxy-url', 'proxy url');
 
     const bindButtonGroup = (groupId, onSelect) => {
         const group = $(groupId);
@@ -177,6 +356,17 @@ window.api.getSettings().then(settings => {
         }));
     };
     bindButtonGroup('group-chat-mode', val => window.api.updateSetting('game chat', val));
+    bindButtonGroup('proxy-mode-group', val => {
+        settings['proxy mode'] = val;
+        window.api.updateSetting('proxy mode', val);
+        updateProxyVisibility();
+        saveAndApplyProxyDebounced(0);
+    });
+    bindButtonGroup('proxy-protocol-group', val => {
+        settings['proxy protocol'] = val;
+        window.api.updateSetting('proxy protocol', val);
+        saveAndApplyProxyDebounced(0);
+    });
 
     const bindSlider = (inputId, valId, key) => {
         const input = $(inputId), valEl = $(valId);
@@ -228,10 +418,7 @@ window.api.getSettings().then(settings => {
     root.querySelectorAll('.hotkey-value').forEach(el => {
         el.addEventListener('click', e => {
             e.stopPropagation();
-            if (activeKeybindEl === el) {
-                cancelKeybindListening();
-                return;
-            }
+            if (activeKeybindEl === el) { cancelKeybindListening(); return; }
             cancelKeybindListening();
 
             activeKeybindEl = el;
@@ -242,14 +429,9 @@ window.api.getSettings().then(settings => {
                 ev.preventDefault();
                 ev.stopPropagation();
 
-                if (ev.code === 'Escape') {
-                    cancelKeybindListening();
-                    return;
-                }
+                if (ev.code === 'Escape') { cancelKeybindListening(); return; }
 
-                if (['ControlLeft', 'ControlRight', 'ShiftLeft', 'ShiftRight', 'AltLeft', 'AltRight', 'MetaLeft', 'MetaRight'].includes(ev.code)) {
-                    return;
-                }
+                if (['ControlLeft', 'ControlRight', 'ShiftLeft', 'ShiftRight', 'AltLeft', 'AltRight', 'MetaLeft', 'MetaRight'].includes(ev.code)) return;
 
                 const combo = window.api.buildCombo(ev.ctrlKey, ev.shiftKey, ev.altKey, ev.code);
                 if (!settings.keybinds) settings.keybinds = {};
@@ -461,10 +643,7 @@ window.api.getSettings().then(settings => {
                 for (const { el, label, cat, pane } of itemMeta) {
                     let score = (cat && matchingCats.has(cat)) ? 2 : (label === q ? 3 : label.startsWith(q) ? 2 : label.includes(q) ? 1 : -1);
                     el.style.display = score >= 0 ? '' : 'none';
-                    if (score > bestScore) {
-                        bestScore = score;
-                        bestPaneId = pane?.id || null;
-                    }
+                    if (score > bestScore) { bestScore = score; bestPaneId = pane?.id || null; }
                 }
                 for (const { el, items } of catMeta) {
                     el.style.display = (matchingCats.has(el) || items.some(i => i.style.display !== 'none')) ? '' : 'none';
@@ -473,6 +652,7 @@ window.api.getSettings().then(settings => {
 
                 showContainers($('plugin-script-mode-group')?.querySelector('.active')?.dataset.val ?? 'url', 'plugin-script-url-container', 'plugin-script-code-container');
                 showContainers($('plugin-css-mode-group')?.querySelector('.active')?.dataset.val ?? 'url', 'plugin-css-url-container', 'plugin-css-code-container');
+                updateProxyVisibility();
                 if (bestPaneId) switchTab(bestPaneId);
             }, 80);
         });
@@ -484,13 +664,9 @@ window.api.getSettings().then(settings => {
 
     const showUpdateUI = (info) => {
         if (!updateItem) return;
-        if (info && info.available) {
-            updateItem.style.display = 'flex';
-            if (info.version && updateVerLabel) {
-                updateVerLabel.textContent = `Version ${info.version} is ready`;
-            }
-        } else {
-            updateItem.style.display = 'none';
+        updateItem.style.display = (info?.available) ? 'flex' : 'none';
+        if (info?.available && info.version && updateVerLabel) {
+            updateVerLabel.textContent = `Version ${info.version} is ready`;
         }
     };
 

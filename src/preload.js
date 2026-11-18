@@ -3,8 +3,7 @@ const fs = require('fs');
 const path = require('path');
 
 try {
-    const freezeFixCode = fs.readFileSync(path.join(__dirname, 'components', 'freezeBugFix.js'), 'utf8');
-    webFrame.executeJavaScript(freezeFixCode);
+    webFrame.executeJavaScript(fs.readFileSync(path.join(__dirname, 'components', 'freezeBugFix.js'), 'utf8'));
 } catch (_) {}
 
 try {
@@ -13,9 +12,7 @@ try {
         const _orig = HTMLCanvasElement.prototype.getContext;
         HTMLCanvasElement.prototype.getContext = function (type, attrs) {
             if (type === 'webgl' || type === 'webgl2' || type === 'experimental-webgl') {
-                attrs = Object.assign({}, attrs || {});
-                attrs.powerPreference = 'high-performance';
-                attrs.desynchronized = true;
+                attrs = Object.assign({}, attrs || {}, { powerPreference: 'high-performance', desynchronized: true });
             }
             return _orig.call(this, type, attrs);
         };
@@ -259,7 +256,6 @@ function applyKeystrokeOverlay(enabled, editMode, xOffset, yOffset, scale, remov
     keysOverlay.style.transformOrigin = 'top left';
 
     const rKeys = removedKeys || [];
-    const keyMap = _keystrokeKeyMap || new Map();
     if (_keystrokeKeyMap) {
         _keystrokeKeyMap.forEach((el, code) => el.classList.toggle('nlc-key-disabled', rKeys.includes(code)));
     } else {
@@ -348,6 +344,12 @@ contextBridge.exposeInMainWorld('api', {
     actionZoom: dir => ipcRenderer.send('action-zoom', dir),
     actionOpenSwapperFolder: () => ipcRenderer.send('action-open-swapper-folder'),
     actionOpenIncognito: (useCurrentSettings = false) => ipcRenderer.send('action-open-incognito', useCurrentSettings),
+    actionApplyProxy: proxySettings => ipcRenderer.invoke('action-apply-proxy', proxySettings),
+    actionProxyNormalNetwork: () => ipcRenderer.invoke('action-proxy-normal-network'),
+    actionQuit: () => ipcRenderer.send('action-quit'),
+    getProxyStatus: () => ipcRenderer.invoke('get-proxy-status'),
+    onShowProxyErrorPopup: cb => ipcRenderer.on('show-proxy-error-popup', (_, msg) => cb(msg)),
+    onShowToast: cb => ipcRenderer.on('show-toast', (_, opts) => cb(opts)),
     buildCombo: (ctrlKey, shiftKey, altKey, code) => buildCombo({ ctrlKey, shiftKey, altKey, code }),
     platform: process.platform,
     getUpdateStatus: () => ipcRenderer.invoke('get-update-status'),
@@ -402,11 +404,9 @@ function loadCelesteMenu() {
 
 window.addEventListener('DOMContentLoaded', async () => {
     try {
-        const s = await ipcRenderer.invoke('get-settings');
-        currentSettings = s;
-        applyAllSettings(s);
-        applyCustomScripts(s['custom scripts']);
-
+        currentSettings = await ipcRenderer.invoke('get-settings');
+        applyAllSettings(currentSettings);
+        applyCustomScripts(currentSettings['custom scripts']);
         ipcRenderer.send('loading-done');
         loadCelesteMenu();
     } catch (e) {
@@ -423,37 +423,37 @@ window.addEventListener('DOMContentLoaded', async () => {
     };
 
     document.addEventListener('keydown', e => {
-            highlightKeystrokeKey(e.code, true);
-            if (e.repeat) return;
-            const ae = document.activeElement;
-            if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA') && !ae.classList.contains('setting-input')) return;
+        highlightKeystrokeKey(e.code, true);
+        if (e.repeat) return;
+        const ae = document.activeElement;
+        if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA') && !ae.classList.contains('setting-input')) return;
 
-            const combo = buildCombo(e);
-            const kb = currentSettings.keybinds || {};
+        const combo = buildCombo(e);
+        const kb = currentSettings.keybinds || {};
 
-            const actions = {
-                [kb['toggle menu']]: () => {
-                    const menu = getMenuOverlay();
-                    if (menu) {
-                        const opening = menu.style.display === 'none';
-                        menu.style.display = opening ? 'flex' : 'none';
-                        _menuOpen = opening;
-                    }
-                },
-                [kb['copy url']]: () => navigator.clipboard.writeText(window.location.href),
-                [kb['return main page']]: () => { window.location.href = 'https://kirka.io'; },
-                [kb['reload']]: () => location.reload(),
-                [kb['fullscreen']]: () => ipcRenderer.send('action-fullscreen'),
-                [kb['devtools']]: () => ipcRenderer.send('action-devtools'),
-                [kb['quick restart']]: () => ipcRenderer.send('action-quick-restart'),
-                [kb['open incognito'] || 'Ctrl+Shift+KeyN']: () => ipcRenderer.send('action-open-incognito', !!currentSettings['incognito use current settings']),
-                [kb['zoom in']]: () => ipcRenderer.send('action-zoom', 'in'),
-                [kb['zoom out']]: () => ipcRenderer.send('action-zoom', 'out'),
-                [kb['zoom reset']]: () => ipcRenderer.send('action-zoom', 'reset'),
-            };
+        const actions = {
+            [kb['toggle menu']]: () => {
+                const menu = getMenuOverlay();
+                if (menu) {
+                    const opening = menu.style.display === 'none';
+                    menu.style.display = opening ? 'flex' : 'none';
+                    _menuOpen = opening;
+                }
+            },
+            [kb['copy url']]: () => navigator.clipboard.writeText(window.location.href),
+            [kb['return main page']]: () => { window.location.href = 'https://kirka.io'; },
+            [kb['reload']]: () => location.reload(),
+            [kb['fullscreen']]: () => ipcRenderer.send('action-fullscreen'),
+            [kb['devtools']]: () => ipcRenderer.send('action-devtools'),
+            [kb['quick restart']]: () => ipcRenderer.send('action-quick-restart'),
+            [kb['open incognito'] || 'Ctrl+Shift+KeyN']: () => ipcRenderer.send('action-open-incognito', !!currentSettings['incognito use current settings']),
+            [kb['zoom in']]: () => ipcRenderer.send('action-zoom', 'in'),
+            [kb['zoom out']]: () => ipcRenderer.send('action-zoom', 'out'),
+            [kb['zoom reset']]: () => ipcRenderer.send('action-zoom', 'reset'),
+        };
 
-            actions[combo]?.();
-        });
+        actions[combo]?.();
+    });
 
-        document.addEventListener('keyup', e => highlightKeystrokeKey(e.code, false));
+    document.addEventListener('keyup', e => highlightKeystrokeKey(e.code, false));
 });
