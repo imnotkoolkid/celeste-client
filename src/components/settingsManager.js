@@ -30,9 +30,33 @@ class SettingsManager {
     scheduleSave() {
         if (this.saveTimeout) clearTimeout(this.saveTimeout);
         this.saveTimeout = setTimeout(() => {
-            fs.promises.writeFile(this.settingsPath, JSON.stringify(this.settings, null, 2))
-                .catch(err => console.error('Failed to save settings:', err));
+            this.saveTimeout = null;
+            const tmpPath = `${this.settingsPath}.tmp`;
+            const data = JSON.stringify(this.settings, null, 2);
+            fs.promises.writeFile(tmpPath, data, 'utf8')
+                .then(() => fs.promises.rename(tmpPath, this.settingsPath))
+                .catch(err => {
+                    fs.promises.writeFile(this.settingsPath, data, 'utf8').catch(e => console.error('Failed to save settings:', e));
+                });
         }, 150);
+    }
+    saveSync() {
+        if (this.saveTimeout) {
+            clearTimeout(this.saveTimeout);
+            this.saveTimeout = null;
+        }
+        const data = JSON.stringify(this.settings, null, 2);
+        const tmpPath = `${this.settingsPath}.tmp`;
+        try {
+            fs.writeFileSync(tmpPath, data, 'utf8');
+            fs.renameSync(tmpPath, this.settingsPath);
+        } catch (_) {
+            try {
+                fs.writeFileSync(this.settingsPath, data, 'utf8');
+            } catch (err) {
+                console.error('Failed to save settings synchronously:', err);
+            }
+        }
     }
     init() {
         try {

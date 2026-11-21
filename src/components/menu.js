@@ -447,19 +447,46 @@ window.api.getSettings().then(settings => {
     bindIntInput('input-keystroke-y', 'keystroke overlay y');
 
     let activeKeybindHandler = null;
+    let activeKeybindUpHandler = null;
     let activeKeybindEl = null;
+    let candidateModifier = null;
 
     const cancelKeybindListening = () => {
         if (activeKeybindHandler) {
             document.removeEventListener('keydown', activeKeybindHandler, true);
             activeKeybindHandler = null;
         }
+        if (activeKeybindUpHandler) {
+            document.removeEventListener('keyup', activeKeybindUpHandler, true);
+            activeKeybindUpHandler = null;
+        }
+        candidateModifier = null;
         if (activeKeybindEl) {
             const orig = settings.keybinds?.[activeKeybindEl.dataset.keybind] || '';
             activeKeybindEl.textContent = orig.replace(/Key|Digit/g, '') || 'None';
             activeKeybindEl.style.opacity = '1';
             activeKeybindEl = null;
         }
+    };
+
+    const commitKeybind = (el, combo) => {
+        if (!settings.keybinds) settings.keybinds = {};
+        settings.keybinds[el.dataset.keybind] = combo;
+        window.api.updateSetting('keybinds', settings.keybinds);
+
+        el.textContent = combo.replace(/Key|Digit/g, '');
+        el.style.opacity = '1';
+
+        if (activeKeybindHandler) {
+            document.removeEventListener('keydown', activeKeybindHandler, true);
+            activeKeybindHandler = null;
+        }
+        if (activeKeybindUpHandler) {
+            document.removeEventListener('keyup', activeKeybindUpHandler, true);
+            activeKeybindUpHandler = null;
+        }
+        candidateModifier = null;
+        activeKeybindEl = null;
     };
 
     root.querySelectorAll('.hotkey-value').forEach(el => {
@@ -469,6 +496,7 @@ window.api.getSettings().then(settings => {
             cancelKeybindListening();
 
             activeKeybindEl = el;
+            candidateModifier = null;
             el.textContent = 'Listening...';
             el.style.opacity = '0.7';
 
@@ -478,22 +506,28 @@ window.api.getSettings().then(settings => {
 
                 if (ev.code === 'Escape') { cancelKeybindListening(); return; }
 
-                if (['ControlLeft', 'ControlRight', 'ShiftLeft', 'ShiftRight', 'AltLeft', 'AltRight', 'MetaLeft', 'MetaRight'].includes(ev.code)) return;
+                const isModifier = ['ControlLeft', 'ControlRight', 'ShiftLeft', 'ShiftRight', 'AltLeft', 'AltRight', 'MetaLeft', 'MetaRight'].includes(ev.code);
+                if (isModifier) {
+                    candidateModifier = ev.code;
+                    return;
+                }
 
+                candidateModifier = null;
                 const combo = window.api.buildCombo(ev.ctrlKey, ev.shiftKey, ev.altKey, ev.code);
-                if (!settings.keybinds) settings.keybinds = {};
-                settings.keybinds[el.dataset.keybind] = combo;
-                window.api.updateSetting('keybinds', settings.keybinds);
+                commitKeybind(el, combo);
+            };
 
-                el.textContent = combo.replace(/Key|Digit/g, '');
-                el.style.opacity = '1';
-
-                document.removeEventListener('keydown', activeKeybindHandler, true);
-                activeKeybindHandler = null;
-                activeKeybindEl = null;
+            activeKeybindUpHandler = ev => {
+                if (candidateModifier && candidateModifier === ev.code) {
+                    ev.preventDefault();
+                    ev.stopPropagation();
+                    const combo = candidateModifier;
+                    commitKeybind(el, combo);
+                }
             };
 
             document.addEventListener('keydown', activeKeybindHandler, true);
+            document.addEventListener('keyup', activeKeybindUpHandler, true);
         });
     });
 

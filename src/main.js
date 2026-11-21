@@ -181,7 +181,7 @@ async function setSessionRoute(ses, settings) {
     }
     routeKey = `${proxyRules}|${config.username}|${config.password}`;
   } else if (wantMask) {
-    if (prev) return { masked: prev.masked, changed: false };
+    if (prev && prev.routeKey === 'blocked') return { masked: prev.masked, changed: false };
     proxyRules = BLOCKED_PROXY_RULES;
     routeKey = 'blocked';
   }
@@ -331,7 +331,7 @@ async function createIncognitoWindow(useCurrentSettings = false) {
     if (errorCode === -3) return;
 
     const maskedNow = !!_incognitoSettings.get(wcId)?.['mask ip'];
-    const isProxyErr = (maskedNow && errorCode < 0) || PROXY_ERR_CODES.has(errorCode);
+    const isProxyErr = maskedNow && (errorCode < 0 || PROXY_ERR_CODES.has(errorCode));
 
     if (isProxyErr) {
       _incognitoProxyFailed.set(wcId, true);
@@ -356,6 +356,10 @@ async function createIncognitoWindow(useCurrentSettings = false) {
     incognitoSession.closeAllConnections().catch(() => {});
     incognitoSession.clearStorageData().catch(() => {});
     incognitoSession.clearCache().catch(() => {});
+  });
+
+  incognitoWin.webContents.on('did-finish-load', () => {
+    incognitoWin.webContents.setZoomLevel(baseSettings['zoom level'] || 0);
   });
 
   if (shouldMask && !cfg) {
@@ -540,7 +544,7 @@ function createWindow() {
     if (errorCode === -3) return;
 
     const maskedNow = !!settingsManager.get('mask ip');
-    const isProxyErr = (maskedNow && errorCode < 0) || PROXY_ERR_CODES.has(errorCode);
+    const isProxyErr = maskedNow && (errorCode < 0 || PROXY_ERR_CODES.has(errorCode));
 
     if (isProxyErr) {
       _proxyConnectionFailed = true;
@@ -784,23 +788,34 @@ app.whenReady().then(async () => {
     shell.openPath(folder);
   });
 
-  ipcMain.on('action-quick-restart', () => { app.relaunch(); app.exit(); });
+  ipcMain.on('action-quick-restart', () => {
+    settingsManager.saveSync();
+    app.relaunch();
+    app.exit();
+  });
 
-  let _zoomLevel = settingsManager.get('zoom level') || 0;
   ipcMain.on('action-zoom', (e, dir) => {
     const win = BrowserWindow.fromWebContents(e.sender);
     if (!win) return;
-    if (dir === 'reset') _zoomLevel = 0;
-    else if (dir === 'in') _zoomLevel += 1;
-    else if (dir === 'out') _zoomLevel -= 1;
-    win.webContents.setZoomLevel(_zoomLevel);
-    settingsManager.settings['zoom level'] = _zoomLevel;
-    settingsManager.scheduleSave();
+    const isIncog = isIncognito(e.sender);
+    let level = win.webContents.getZoomLevel() || 0;
+    if (dir === 'reset') level = 0;
+    else if (dir === 'in') level += 1;
+    else if (dir === 'out') level -= 1;
+    win.webContents.setZoomLevel(level);
+    if (isIncog) {
+      const s = _incognitoSettings.get(e.sender.id);
+      if (s) s['zoom level'] = level;
+    } else {
+      settingsManager.settings['zoom level'] = level;
+      settingsManager.scheduleSave();
+    }
   });
 });
 
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 app.on('before-quit', () => {
+  settingsManager.saveSync();
   drpc.destroy();
   proxyGate.closeAll();
 });
@@ -813,6 +828,7 @@ app.on('login', (event, webContents, details, authInfo, callback) => {
 
     if (!config || !config.username) {
       console.warn('Proxy authentication requested but no credentials configured.');
+      event.preventDefault();
       if (isIncog && webContents && webContents.id) {
         _incognitoProxyFailed.set(webContents.id, true);
       } else {
@@ -826,6 +842,7 @@ app.on('login', (event, webContents, details, authInfo, callback) => {
 
     if (details && details.firstAuthAttempt === false) {
       console.warn('Proxy authentication failed: invalid credentials rejected by server.');
+      event.preventDefault();
       if (isIncog && webContents && webContents.id) {
         _incognitoProxyFailed.set(webContents.id, true);
       } else {

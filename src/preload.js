@@ -23,7 +23,18 @@ let currentSettings = {};
 const assetCache = new Map();
 let _fontBlobUrl = null;
 let _menuOpen = false;
-const _SENSITIVE_KEYS = new Set(['custom css list', 'custom scripts']);
+let _menuShadowRoot = null;
+
+function getDeepActiveElement() {
+    let el = document.activeElement;
+    if (el && el.id === 'celeste-menu-host' && _menuShadowRoot) {
+        return _menuShadowRoot.activeElement || el;
+    }
+    while (el && el.shadowRoot && el.shadowRoot.activeElement) {
+        el = el.shadowRoot.activeElement;
+    }
+    return el;
+}
 
 function getAssetSync(assetPath, encoding) {
     const key = `${assetPath}_${encoding || 'utf8'}`;
@@ -304,7 +315,7 @@ function applyAllSettings(s) {
     );
 }
 
-contextBridge.exposeInMainWorld('api', {
+const api = {
     getSettings: async () => {
         currentSettings = await ipcRenderer.invoke('get-settings');
         return currentSettings;
@@ -318,7 +329,6 @@ contextBridge.exposeInMainWorld('api', {
         }
     },
     updateSetting: (key, value) => {
-        if (_SENSITIVE_KEYS.has(key) && !_menuOpen) return Promise.resolve();
         currentSettings[key] = value;
         if (key === 'celeste theme') applyTheme(value);
         else if (key === 'custom css list') applyCustomStyles(value);
@@ -357,7 +367,24 @@ contextBridge.exposeInMainWorld('api', {
     onUpdateStatusChanged: cb => ipcRenderer.on('update-status-changed', (_, info) => cb(info)),
     onUpdateDownloadProgress: cb => ipcRenderer.on('update-download-progress', (_, percent) => cb(percent)),
     onUpdateDownloaded: cb => ipcRenderer.on('update-downloaded', () => cb())
-});
+};
+
+window.api = api;
+
+try {
+    contextBridge.exposeInMainWorld('api', {
+        getSettings: async () => {
+            const s = await ipcRenderer.invoke('get-settings');
+            const safe = { ...s };
+            delete safe['proxy password'];
+            delete safe['proxy url'];
+            return safe;
+        },
+        buildCombo: (ctrlKey, shiftKey, altKey, code) => buildCombo({ ctrlKey, shiftKey, altKey, code }),
+        platform: process.platform,
+        getUpdateStatus: () => ipcRenderer.invoke('get-update-status')
+    });
+} catch (_) {}
 
 function loadCelesteMenu() {
     const fontUrl = getFontBlobUrl();
@@ -387,7 +414,8 @@ function loadCelesteMenu() {
         const host = document.createElement('div');
         host.id = 'celeste-menu-host';
         host.style.cssText = 'position:absolute;top:0;left:0;width:0;height:0;overflow:visible;z-index:99999;';
-        const shadowRoot = host.attachShadow({ mode: 'open' });
+        const shadowRoot = host.attachShadow({ mode: 'closed' });
+        _menuShadowRoot = shadowRoot;
         if (styleEl) shadowRoot.appendChild(styleEl);
         const wrapper = document.createElement('div');
         wrapper.innerHTML = htmlContent;
@@ -395,9 +423,11 @@ function loadCelesteMenu() {
         document.body.appendChild(host);
 
         if (jsContent) {
-            const scriptEl = document.createElement('script');
-            scriptEl.textContent = `(function(){const root=document.getElementById('celeste-menu-host').shadowRoot;\n${jsContent}\n})();`;
-            document.body.appendChild(scriptEl);
+            try {
+                (new Function('root', 'api', jsContent))(_menuShadowRoot, api);
+            } catch (err) {
+                console.error('Failed to execute Celeste menu script:', err);
+            }
         }
     }).catch(err => console.error('Failed to load Celeste menu:', err));
 }
@@ -416,8 +446,8 @@ window.addEventListener('DOMContentLoaded', async () => {
 
     let _menuOverlay = null;
     const getMenuOverlay = () => {
-        if (!_menuOverlay) {
-            _menuOverlay = document.getElementById('celeste-menu-host')?.shadowRoot?.getElementById('celeste-menu-overlay');
+        if (!_menuOverlay && _menuShadowRoot) {
+            _menuOverlay = _menuShadowRoot.getElementById('celeste-menu-overlay');
         }
         return _menuOverlay;
     };
@@ -425,8 +455,21 @@ window.addEventListener('DOMContentLoaded', async () => {
     document.addEventListener('keydown', e => {
         highlightKeystrokeKey(e.code, true);
         if (e.repeat) return;
-        const ae = document.activeElement;
-        if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA') && !ae.classList.contains('setting-input')) return;
+        const ae = getDeepActiveElement();
+        const isInput = ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable);
+        if (isInput) {
+            const combo = buildCombo(e);
+            const kb = currentSettings.keybinds || {};
+            if (combo === kb['toggle menu']) {
+                const menu = getMenuOverlay();
+                if (menu) {
+                    const opening = menu.style.display === 'none';
+                    menu.style.display = opening ? 'flex' : 'none';
+                    _menuOpen = opening;
+                }
+            }
+            return;
+        }
 
         const combo = buildCombo(e);
         const kb = currentSettings.keybinds || {};
@@ -456,4 +499,10 @@ window.addEventListener('DOMContentLoaded', async () => {
     });
 
     document.addEventListener('keyup', e => highlightKeystrokeKey(e.code, false));
+
+    window.addEventListener('blur', () => {
+        if (_keystrokeKeyMap) {
+            _keystrokeKeyMap.forEach(el => el.classList.remove('nlc-key-active'));
+        }
+    });
 });
