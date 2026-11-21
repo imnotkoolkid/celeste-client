@@ -122,6 +122,37 @@ window.api.getSettings().then(settings => {
         });
     };
 
+    let _activeProxyReloadToast = null;
+    const updateProxyReloadToast = (needed) => {
+        if (!needed) {
+            _activeProxyReloadToast?.dismiss();
+            _activeProxyReloadToast = null;
+            return;
+        }
+        if (_activeProxyReloadToast) return;
+        _activeProxyReloadToast = showToast({
+            title: 'Proxy changed',
+            message: 'Your current game connection is still on the old route. Reload to switch it.',
+            duration: null,
+            actions: [
+                {
+                    label: 'RELOAD NOW',
+                    primary: true,
+                    onClick: () => {
+                        _activeProxyReloadToast = null;
+                        location.reload();
+                    }
+                },
+                {
+                    label: 'LATER',
+                    onClick: () => {
+                        _activeProxyReloadToast = null;
+                    }
+                }
+            ]
+        });
+    };
+
     window.api.onShowProxyErrorPopup?.((msg) => showProxyErrorPopup(msg));
     window.api.getProxyStatus?.().then(st => { if (st?.failed) showProxyErrorPopup(); });
 
@@ -305,7 +336,18 @@ window.api.getSettings().then(settings => {
     bindInput('input-killicon', 'custom kill icon');
 
     let proxyDebounceTimer = null;
-    const saveAndApplyProxyDebounced = (delay = 700) => {
+    let _lastProxyHint = 0;
+    const showProxyHint = () => {
+        if (Date.now() - _lastProxyHint < 5000) return;
+        _lastProxyHint = Date.now();
+        showToast({
+            title: 'Mask IP is not active yet',
+            message: 'Enter a proxy below to start masking.',
+            duration: 5000
+        });
+    };
+
+    const saveAndApplyProxyDebounced = (delay = 700, typing = false) => {
         clearTimeout(proxyDebounceTimer);
         proxyDebounceTimer = setTimeout(async () => {
             const isMaskOn = !!$('toggle-mask-ip')?.checked;
@@ -322,20 +364,25 @@ window.api.getSettings().then(settings => {
             Object.assign(settings, proxySettings);
             const res = await window.api.actionApplyProxy(proxySettings);
             if (isMaskOn && res && !res.success) {
-                showProxyErrorPopup(res.error);
-            } else if (!isMaskOn || res?.success) {
-                if (_activeProxyErrorToast) {
-                    _activeProxyErrorToast.dismiss();
-                    _activeProxyErrorToast = null;
+                const entered = proxySettings['proxy mode'] === 'url'
+                    ? !!proxySettings['proxy url']
+                    : !!(proxySettings['proxy host'] && proxySettings['proxy port']);
+                if (!typing) {
+                    if (!entered) showProxyHint();
+                    else showProxyErrorPopup('The proxy details look wrong. Begin with normal network?');
                 }
+            } else if (!isMaskOn || res?.success) {
+                _activeProxyErrorToast?.dismiss();
+                _activeProxyErrorToast = null;
             }
+            updateProxyReloadToast(!!res?.success && !!res.reloadNeeded);
         }, delay);
     };
 
     const bindProxyInput = (id, key) => {
         const el = $(id);
         if (!el) return;
-        el.addEventListener('input', e => { settings[key] = e.target.value; saveAndApplyProxyDebounced(700); });
+        el.addEventListener('input', e => { settings[key] = e.target.value; saveAndApplyProxyDebounced(700, true); });
         el.addEventListener('change', e => { settings[key] = e.target.value; saveAndApplyProxyDebounced(0); });
     };
     bindProxyInput('input-proxy-host', 'proxy host');

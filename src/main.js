@@ -1,10 +1,11 @@
-const { app, BrowserWindow, Menu, ipcMain, net, protocol, shell, session } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, protocol, shell, session, webContents } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const settingsManager = require('./components/settingsManager');
 const drpc = require('./components/drpc');
 const { initResourceSwapper, getSwapperFolder } = require('./components/swapper');
+const proxyGate = require('./components/proxyGate');
 
 app.setName('Celeste Client');
 app.setAppUserModelId('dev.imnotkoolkid.celesteclient');
@@ -30,7 +31,34 @@ const _incognitoSettings = new Map();
 
 let _proxyConnectionFailed = false;
 const _incognitoProxyFailed = new Map();
-const _incognitoSessions = new Map(); 
+const _incognitoSessions = new Map();
+let _incognitoSeq = 0;
+
+const PROXY_KEYS = ['proxy mode', 'proxy protocol', 'proxy host', 'proxy port', 'proxy username', 'proxy password', 'proxy url'];
+const PROXY_ERR_CODES = new Set([-100, -101, -102, -104, -105, -107, -109, -111, -115, -118, -120, -121, -124, -127, -130, -136, -324, -336]);
+
+const PROXY_SCHEMES = {
+  http: 'http',
+  https: 'https',
+  socks: 'socks5',
+  socks5: 'socks5',
+  socks5h: 'socks5',
+  socks4: 'socks4',
+  socks4a: 'socks4'
+};
+
+function buildProxyConfig(rawProtocol, host, port, username, password) {
+  const protocol = PROXY_SCHEMES[String(rawProtocol || 'http').toLowerCase()];
+  if (!protocol) return null;
+  return {
+    proxyRules: protocol === 'http' ? `${host}:${port}` : `${protocol}://${host}:${port}`,
+    protocol,
+    host,
+    port: String(port),
+    username: username || '',
+    password: password || ''
+  };
+}
 
 function safeDecode(val) {
   if (!val) return '';
@@ -39,6 +67,11 @@ function safeDecode(val) {
   } catch (_) {
     return val;
   }
+}
+
+function splitHostPortStr(str) {
+  const m = str.match(/^(\[[^\]]+\]|[^:]+)(?::(\d+))?$/);
+  return m ? [m[1], m[2] || ''] : ['', ''];
 }
 
 function parseProxyUrl(raw) {
@@ -54,93 +87,28 @@ function parseProxyUrl(raw) {
       str = str.slice(protoMatch[0].length).trim();
     }
 
-    let host = '';
-    let port = '';
-    let username = '';
-    let password = '';
-
-    const hpMatch = str.match(/^(\[[^\]]+\]|[^:/@]+):(\d{1,5}):([^:]+):(.*)$/);
-    if (hpMatch) {
-      host = hpMatch[1];
-      port = hpMatch[2];
-      username = safeDecode(hpMatch[3]);
-      password = safeDecode(hpMatch[4]);
-    } else if (str.includes('@')) {
+    let host = '', port = '', username = '', password = '';
+    if (str.includes('@')) {
       const atIdx = str.lastIndexOf('@');
-      const authPart = str.slice(0, atIdx);
-      const destPart = str.slice(atIdx + 1).replace(/\/.*$/, '');
-
-      const colonAuth = authPart.indexOf(':');
-      if (colonAuth !== -1) {
-        username = safeDecode(authPart.slice(0, colonAuth));
-        password = safeDecode(authPart.slice(colonAuth + 1));
-      } else {
-        username = safeDecode(authPart);
-      }
-
-      const ipv6Match = destPart.match(/^\[([^\]]+)\](?::(\d+))?$/);
-      if (ipv6Match) {
-        host = `[${ipv6Match[1]}]`;
-        port = ipv6Match[2] || '';
-      } else {
-        const colonDest = destPart.lastIndexOf(':');
-        if (colonDest !== -1) {
-          host = destPart.slice(0, colonDest);
-          port = destPart.slice(colonDest + 1);
-        } else {
-          host = destPart;
-        }
-      }
+      const auth = str.slice(0, atIdx);
+      const colon = auth.indexOf(':');
+      username = safeDecode(colon !== -1 ? auth.slice(0, colon) : auth);
+      password = colon !== -1 ? safeDecode(auth.slice(colon + 1)) : '';
+      [host, port] = splitHostPortStr(str.slice(atIdx + 1).replace(/\/.*$/, ''));
     } else {
-      str = str.replace(/\/.*$/, '');
-      const ipv6Match = str.match(/^\[([^\]]+)\](?::(\d+))?(?::([^:]+):(.*))?$/);
-      if (ipv6Match) {
-        host = `[${ipv6Match[1]}]`;
-        port = ipv6Match[2] || '';
-        username = ipv6Match[3] ? safeDecode(ipv6Match[3]) : '';
-        password = ipv6Match[4] ? safeDecode(ipv6Match[4]) : '';
-      } else {
-        const parts = str.split(':');
-        if (parts.length >= 4) {
-          const portCandidate = parseInt(parts[1], 10);
-          if (!isNaN(portCandidate) && portCandidate >= 1 && portCandidate <= 65535 && /^\d+$/.test(parts[1])) {
-            host = parts[0];
-            port = parts[1];
-            username = safeDecode(parts[2]);
-            password = safeDecode(parts.slice(3).join(':'));
-          } else {
-            return null;
-          }
-        } else if (parts.length === 2) {
-          host = parts[0];
-          port = parts[1];
-        } else {
-          return null;
-        }
-      }
+      const m = str.replace(/\/.*$/, '').match(/^(\[[^\]]+\]|[^:]+):(\d{1,5})(?::([^:]+):(.*))?$/);
+      if (!m) return null;
+      host = m[1];
+      port = m[2];
+      username = safeDecode(m[3]);
+      password = safeDecode(m[4]);
     }
 
     host = host.trim();
-    if (!host) return null;
-
     const portNum = parseInt(port, 10);
-    if (isNaN(portNum) || portNum < 1 || portNum > 65535 || !/^\d+$/.test(port)) {
-      return null;
-    }
-    port = String(portNum);
+    if (!host || isNaN(portNum) || portNum < 1 || portNum > 65535) return null;
 
-    const proxyRules = (protocol.startsWith('socks') || protocol === 'https')
-      ? `${protocol}://${host}:${port}`
-      : `${host}:${port}`;
-
-    return {
-      proxyRules,
-      protocol,
-      host,
-      port,
-      username: username ? username.trim() : '',
-      password: password || ''
-    };
+    return buildProxyConfig(protocol, host, String(portNum), username ? username.trim() : '', password);
   } catch (e) {
     console.error('Failed to parse proxy URL:', e);
     return null;
@@ -165,18 +133,7 @@ function getManualProxyConfig(settings) {
   const portNum = parseInt(port, 10);
   if (isNaN(portNum) || portNum < 1 || portNum > 65535 || !/^\d+$/.test(port)) return null;
 
-  const proxyRules = (protocol.startsWith('socks') || protocol === 'https')
-    ? `${protocol}://${host}:${portNum}`
-    : `${host}:${portNum}`;
-
-  return {
-    proxyRules,
-    protocol,
-    host,
-    port: String(portNum),
-    username,
-    password
-  };
+  return buildProxyConfig(protocol, host, portNum, username, password);
 }
 
 function getUrlProxyConfig(settings) {
@@ -191,16 +148,97 @@ function getProxyConfig(settings) {
   return mode === 'url' ? getUrlProxyConfig(settings) : getManualProxyConfig(settings);
 }
 
-async function applyProxySettings(settings) {
-  const enabled = !!settings['mask ip'];
-  const config = getProxyConfig(settings);
+const _sessionRoutes = new WeakMap();
+const _proxyQueues = new WeakMap();
 
-  if (enabled && config) {
-    await session.defaultSession.setProxy({ proxyRules: config.proxyRules }).catch(err => console.error('Failed to set proxy:', err));
-  } else {
-    await session.defaultSession.setProxy({ proxyRules: '' }).catch(err => console.error('Failed to clear proxy:', err));
-  }
+const BLOCKED_PROXY_RULES = 'http://127.0.0.1:1';
+
+function setWebRtcPolicy(wc, masked) {
+  try {
+    wc.setWebRTCIPHandlingPolicy(masked ? 'disable_non_proxied_udp' : 'default');
+  } catch (_) {}
 }
+
+async function setSessionRoute(ses, settings) {
+  const wantMask = !!(settings && settings['mask ip']);
+  const config = wantMask ? getProxyConfig(settings) : null;
+  const prev = _sessionRoutes.get(ses);
+
+  let proxyRules = '';
+  let routeKey = 'direct';
+  let gateKey = null;
+
+  if (config) {
+    proxyRules = config.proxyRules;
+    if (proxyGate.SUPPORTED.has(config.protocol)) {
+      try {
+        const gate = await proxyGate.acquire(config);
+        proxyRules = `127.0.0.1:${gate.port}`;
+        gateKey = gate.key;
+      } catch (err) {
+        console.error('Failed to start proxy gate:', err);
+      }
+    }
+    routeKey = `${proxyRules}|${config.username}|${config.password}`;
+  } else if (wantMask) {
+    if (prev) return { masked: prev.masked, changed: false };
+    proxyRules = BLOCKED_PROXY_RULES;
+    routeKey = 'blocked';
+  }
+
+  const masked = routeKey !== 'direct';
+
+  try {
+    await ses.setProxy(masked ? { mode: 'fixed_servers', proxyRules } : { mode: 'direct' });
+  } catch (err) {
+    console.error('Failed to set proxy:', err);
+  }
+
+  if (prev && prev.gateKey) proxyGate.release(prev.gateKey);
+  _sessionRoutes.set(ses, { routeKey, gateKey, masked });
+
+  for (const wc of webContents.getAllWebContents()) {
+    if (!wc.isDestroyed() && wc.session === ses) setWebRtcPolicy(wc, masked);
+  }
+
+  return { masked, changed: (prev ? prev.routeKey : 'direct') !== routeKey };
+}
+
+const _pageRoutes = new Map();
+
+function currentRouteKey(ses) {
+  const route = _sessionRoutes.get(ses);
+  return route ? route.routeKey : 'direct';
+}
+
+function needsReloadForProxy(wc) {
+  if (!wc || wc.isDestroyed() || !/^https?:/i.test(wc.getURL() || '')) return false;
+  return _pageRoutes.has(wc.id) && _pageRoutes.get(wc.id) !== currentRouteKey(wc.session);
+}
+
+function applyProxyToSession(ses, settings) {
+  const run = () => setSessionRoute(ses, settings);
+  const next = (_proxyQueues.get(ses) || Promise.resolve()).then(run, run);
+  _proxyQueues.set(ses, next);
+  return next;
+}
+
+function applyProxySettings(settings) {
+  return applyProxyToSession(session.defaultSession, settings);
+}
+
+app.on('web-contents-created', (_, wc) => {
+  const route = _sessionRoutes.get(wc.session);
+  if (route && route.masked) setWebRtcPolicy(wc, true);
+
+  const id = wc.id;
+  wc.on('did-start-navigation', (details, _url, isInPlace, isMainFrame) => {
+    const mainFrame = details.isMainFrame ?? isMainFrame;
+    const sameDocument = details.isSameDocument ?? isInPlace;
+    if (mainFrame && !sameDocument) _pageRoutes.set(id, currentRouteKey(wc.session));
+  });
+  wc.once('destroyed', () => _pageRoutes.delete(id));
+});
 
 function isIncognito(wc) {
   if (!wc || !wc.id) return false;
@@ -220,15 +258,29 @@ function getSettingsForWebContents(wc) {
   return settingsManager.settings;
 }
 
+function getProxyConfigForLogin(wc, authInfo) {
+  if (wc && wc.id) return getProxyConfig(getSettingsForWebContents(wc));
+
+  const askingHost = String(authInfo.host || '').replace(/^\[|\]$/g, '').toLowerCase();
+  for (const s of [settingsManager.settings, ..._incognitoSettings.values()]) {
+    if (!s || !s['mask ip']) continue;
+    const config = getProxyConfig(s);
+    if (!config || !config.username) continue;
+    const host = config.host.replace(/^\[|\]$/g, '').toLowerCase();
+    if (host === askingHost && String(config.port) === String(authInfo.port)) return config;
+  }
+  return getProxyConfig(settingsManager.settings);
+}
+
 async function createIncognitoWindow(useCurrentSettings = false) {
   const baseSettings = useCurrentSettings
     ? JSON.parse(JSON.stringify(settingsManager.settings))
     : JSON.parse(JSON.stringify(settingsManager.defaults));
 
   const alwaysMask = !!settingsManager.get('incognito always mask ip');
-  if (alwaysMask) {
+  if (alwaysMask || settingsManager.get('mask ip')) {
     baseSettings['mask ip'] = true;
-    for (const k of ['proxy mode', 'proxy protocol', 'proxy host', 'proxy port', 'proxy username', 'proxy password', 'proxy url']) {
+    for (const k of PROXY_KEYS) {
       baseSettings[k] = settingsManager.get(k) ?? baseSettings[k];
     }
   }
@@ -236,13 +288,11 @@ async function createIncognitoWindow(useCurrentSettings = false) {
   const shouldMask = !!baseSettings['mask ip'];
   const cfg = getProxyConfig(baseSettings);
 
-  const incognitoSession = session.fromPartition('incognito');
 
-  if (shouldMask && cfg) {
-    await incognitoSession.setProxy({ proxyRules: cfg.proxyRules }).catch(console.error);
-  } else {
-    await incognitoSession.setProxy({ proxyRules: '' }).catch(console.error);
-  }
+  const partition = `incognito-${Date.now()}-${++_incognitoSeq}`;
+  const incognitoSession = session.fromPartition(partition);
+
+  await applyProxyToSession(incognitoSession, baseSettings);
 
   const incognitoWin = new BrowserWindow({
     minWidth: 900,
@@ -258,7 +308,7 @@ async function createIncognitoWindow(useCurrentSettings = false) {
       preload: path.join(__dirname, 'preload.js'),
       backgroundThrottling: false,
       spellcheck: false,
-      partition: 'incognito',
+      partition,
     }
   });
 
@@ -275,13 +325,13 @@ async function createIncognitoWindow(useCurrentSettings = false) {
   _incognitoSessions.set(wcId, incognitoWin.webContents.session);
   _incognitoProxyFailed.set(wcId, false);
 
-  const PROXY_ERR_CODES = new Set([-100, -101, -102, -104, -105, -107, -109, -111, -115, -118, -124, -127, -130, -136, -324, -336]);
   const handleIncognitoLoadFailure = (event, errorCode, errorDescription, validatedURL, isMainFrame) => {
     if (!isMainFrame) return;
     if (validatedURL && validatedURL.includes('blank.html')) return;
     if (errorCode === -3) return;
 
-    const isProxyErr = (shouldMask && errorCode < 0) || PROXY_ERR_CODES.has(errorCode);
+    const maskedNow = !!_incognitoSettings.get(wcId)?.['mask ip'];
+    const isProxyErr = (maskedNow && errorCode < 0) || PROXY_ERR_CODES.has(errorCode);
 
     if (isProxyErr) {
       _incognitoProxyFailed.set(wcId, true);
@@ -299,6 +349,13 @@ async function createIncognitoWindow(useCurrentSettings = false) {
     _incognitoSettings.delete(wcId);
     _incognitoSessions.delete(wcId);
     _incognitoProxyFailed.delete(wcId);
+
+    const route = _sessionRoutes.get(incognitoSession);
+    if (route && route.gateKey) proxyGate.release(route.gateKey);
+    _sessionRoutes.delete(incognitoSession);
+    incognitoSession.closeAllConnections().catch(() => {});
+    incognitoSession.clearStorageData().catch(() => {});
+    incognitoSession.clearCache().catch(() => {});
   });
 
   if (shouldMask && !cfg) {
@@ -477,13 +534,13 @@ function createWindow() {
   mainWindow.webContents.on('did-navigate', onNavigate);
   mainWindow.webContents.on('did-navigate-in-page', onNavigate);
 
-  const PROXY_ERR_CODES = new Set([-100, -101, -102, -104, -105, -107, -109, -111, -115, -118, -124, -127, -130, -136, -324, -336]);
   const handleLoadFailure = (event, errorCode, errorDescription, validatedURL, isMainFrame) => {
     if (!isMainFrame) return;
     if (validatedURL && validatedURL.includes('blank.html')) return;
-    if (errorCode === -3) return; 
+    if (errorCode === -3) return;
 
-    const isProxyErr = (shouldMask && errorCode < 0) || PROXY_ERR_CODES.has(errorCode);
+    const maskedNow = !!settingsManager.get('mask ip');
+    const isProxyErr = (maskedNow && errorCode < 0) || PROXY_ERR_CODES.has(errorCode);
 
     if (isProxyErr) {
       _proxyConnectionFailed = true;
@@ -508,6 +565,12 @@ function createWindow() {
 
 app.whenReady().then(async () => {
   try { os.setPriority(os.constants.priority.PRIORITY_HIGH); } catch (_) {}
+
+  try {
+    app.configureHostResolver({ secureDnsMode: 'off', enableAdditionalDnsQueryTypes: false });
+  } catch (err) {
+    console.error('Failed to configure host resolver:', err);
+  }
 
   await initResourceSwapper(settingsManager.get('swapper enabled') !== false);
   await applyProxySettings(settingsManager.settings); 
@@ -546,15 +609,8 @@ app.whenReady().then(async () => {
           _incognitoProxyFailed.set(e.sender.id, false);
         }
         if (key === 'mask ip' || key.startsWith('proxy')) {
-          const cfg = getProxyConfig(s);
           const ses = _incognitoSessions.get(e.sender.id);
-          if (ses) {
-            if (s['mask ip'] && cfg) {
-              await ses.setProxy({ proxyRules: cfg.proxyRules }).catch(console.error);
-            } else {
-              await ses.setProxy({ proxyRules: '' }).catch(console.error);
-            }
-          }
+          if (ses) await applyProxyToSession(ses, s);
         }
       }
       return { success: true };
@@ -583,15 +639,8 @@ app.whenReady().then(async () => {
         await applyProxySettings(settingsManager.settings);
         drpc.init(settingsManager.settings);
       } else {
-        const cfg = getProxyConfig(target);
         const ses = _incognitoSessions.get(e.sender.id);
-        if (ses) {
-          if (target['mask ip'] && cfg) {
-            await ses.setProxy({ proxyRules: cfg.proxyRules }).catch(console.error);
-          } else {
-            await ses.setProxy({ proxyRules: '' }).catch(console.error);
-          }
-        }
+        if (ses) await applyProxyToSession(ses, target);
       }
     }
     return { success: true };
@@ -609,16 +658,11 @@ app.whenReady().then(async () => {
 
       if (!ses) return { success: false, error: 'Session not found' };
 
+      await applyProxyToSession(ses, s);
+
       if (s['mask ip'] && !config) {
-        await ses.setProxy({ proxyRules: '' }).catch(console.error);
         _incognitoProxyFailed.set(e.sender.id, true);
         return { success: false, error: "Couldn't connect to proxy" };
-      }
-
-      if (s['mask ip'] && config) {
-        await ses.setProxy({ proxyRules: config.proxyRules }).catch(console.error);
-      } else {
-        await ses.setProxy({ proxyRules: '' }).catch(console.error);
       }
 
       _incognitoProxyFailed.set(e.sender.id, false);
@@ -628,7 +672,7 @@ app.whenReady().then(async () => {
           win.loadURL('https://kirka.io/');
         }
       }
-      return { success: true };
+      return { success: true, reloadNeeded: needsReloadForProxy(e.sender) };
     } else {
       if (proxySettings) {
         Object.assign(settingsManager.settings, proxySettings);
@@ -648,7 +692,7 @@ app.whenReady().then(async () => {
           mainWindow.loadURL('https://kirka.io/');
         }
       }
-      return { success: true };
+      return { success: true, reloadNeeded: needsReloadForProxy(e.sender) };
     }
   });
 
@@ -667,7 +711,7 @@ app.whenReady().then(async () => {
       const s = _incognitoSettings.get(e.sender.id);
       if (s) s['mask ip'] = false;
       const ses = _incognitoSessions.get(e.sender.id);
-      if (ses) await ses.setProxy({ proxyRules: '' }).catch(console.error);
+      if (ses) await applyProxyToSession(ses, s || { 'mask ip': false });
       if (win && !win.isDestroyed()) {
         win.loadURL('https://kirka.io/');
       }
@@ -696,11 +740,11 @@ app.whenReady().then(async () => {
 
   const MAX_CACHE = 256;
   const resourceCache = new Map();
-  ipcMain.handle('fetch-resource', async (_, url) => {
+  ipcMain.handle('fetch-resource', async (e, url) => {
     if (resourceCache.has(url)) return resourceCache.get(url);
     if (!url.startsWith('http://') && !url.startsWith('https://')) return '';
     try {
-      const res = await net.fetch(url);
+      const res = await e.sender.session.fetch(url);
       if (!res.ok) return '';
       const body = await res.text();
       if (resourceCache.size >= MAX_CACHE) resourceCache.delete(resourceCache.keys().next().value);
@@ -756,14 +800,16 @@ app.whenReady().then(async () => {
 });
 
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
-app.on('before-quit', () => drpc.destroy());
+app.on('before-quit', () => {
+  drpc.destroy();
+  proxyGate.closeAll();
+});
 app.on('activate', () => { if (!mainWindow) createWindow(); });
 
 app.on('login', (event, webContents, details, authInfo, callback) => {
   if (authInfo.isProxy) {
     const isIncog = isIncognito(webContents);
-    const targetSettings = getSettingsForWebContents(webContents);
-    const config = getProxyConfig(targetSettings);
+    const config = getProxyConfigForLogin(webContents, authInfo);
 
     if (!config || !config.username) {
       console.warn('Proxy authentication requested but no credentials configured.');
