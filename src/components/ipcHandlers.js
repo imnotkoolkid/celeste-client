@@ -4,7 +4,7 @@ const settingsManager = require('./settingsManager');
 const proxyManager = require('./proxyManager');
 const windowManager = require('./windowManager');
 const drpc = require('./drpc');
-const { getSwapperFolder } = require('./swapper');
+const { getSwapperFolder, setSwapperEnabled } = require('./swapper');
 
 function registerIpcHandlers(updaterOpts = {}) {
   const { getUpdateStatus = () => ({ available: false, version: '' }), installUpdate = () => {} } = updaterOpts;
@@ -49,6 +49,9 @@ function registerIpcHandlers(updaterOpts = {}) {
     }
     if (key === 'show rpc' || key === 'rpc match info') {
       drpc.init(settingsManager.settings);
+    }
+    if (key === 'swapper enabled') {
+      setSwapperEnabled(value);
     }
     return { success: true };
   });
