@@ -2,6 +2,8 @@ appId: dev.imnotkoolkid.celesteclient
 productName: Celeste Client
 artifactName: "${productName}-${os}.${ext}"
 npmRebuild: false
+electronVersion: 44.0.0
+electronDist: node_modules/electron/dist
 publish:
   - provider: github
     releaseType: release

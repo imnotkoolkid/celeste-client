@@ -12,14 +12,14 @@ jobs:
 
     strategy:
       matrix:
-        os: [macos-15-intel, windows-latest, ubuntu-latest]
+        os: [macos-latest, windows-latest, ubuntu-latest]
         include:
           - os: windows-latest
             arch: x64
             build_command: npx electron-builder --windows --x64 --publish always "-c.publish.repo=celeste-client"
-          - os: macos-15-intel
-            arch: x64
-            build_command: npx electron-builder --mac dmg --x64 --publish always "-c.publish.repo=celeste-client"
+          - os: macos-latest
+            arch: arm64
+            build_command: npx electron-builder --mac dmg --arm64 --publish always "-c.publish.repo=celeste-client"
           - os: ubuntu-latest
             arch: x64
             build_command: npx electron-builder --linux --x64 --publish always "-c.publish.repo=celeste-client"
@@ -36,7 +36,7 @@ jobs:
       - name: Install Dependencies
         run: npm install
         env:
-          npm_config_arch: x64
+          npm_config_arch: ${{ matrix.arch }}
 
       - name: Build and Publish Electron App
         run: ${{ matrix.build_command }}

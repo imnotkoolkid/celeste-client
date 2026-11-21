@@ -20,11 +20,11 @@
     "electron-updater": "^6.8.9"
   },
   "devDependencies": {
-    "electron": "^45.3.1",
+    "electron": "44.0.0",
     "electron-builder": "^26.0.12",
     "rcedit": "^5.0.2"
   },
   "allowScripts": {
-    "electron@45.3.1": true
+    "electron@44.0.0": true
   }
 }

@@ -157,6 +157,24 @@
           <label class="toggle-switch"><input type="checkbox" id="toggle-unlimited-fps"><span
               class="slider"></span></label>
         </div>
+        <div class="setting-item" id="item-max-pending-frames">
+          <div class="setting-label-container">
+            <span class="setting-label">Max Pending Frames</span>
+            <span class="setting-label-sub">Requires Restart</span>
+          </div>
+          <div class="button-group" id="group-max-pending-frames">
+            <div class="btn-box active" data-val="1">1 (Lowest Lag)</div>
+            <div class="btn-box" data-val="2">2 (High FPS)</div>
+            <div class="btn-box" data-val="3">3 (Max FPS)</div>
+          </div>
+        </div>
+        <div class="setting-item" id="item-frame-cap">
+          <div class="setting-label-container">
+            <span class="setting-label">Custom Frame Cap</span>
+            <span class="setting-label-sub">(0 = Uncapped)</span>
+          </div>
+          <input type="text" class="setting-input num-input" id="input-frame-cap" placeholder="0" value="0">
+        </div>
         <div class="setting-item">
           <div class="setting-label-container">
             <span class="setting-label">Start Fullscreen</span>

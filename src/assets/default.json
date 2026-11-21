@@ -1,5 +1,7 @@
 {
   "unlimited fps": true,
+  "max pending frames": 1,
+  "custom frame cap": 0,
   "start fullscreen": true,
   "swapper enabled": true,
   "zoom level": 0,

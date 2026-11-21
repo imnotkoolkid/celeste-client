@@ -207,6 +207,7 @@ window.api.getSettings().then(settings => {
             ['input-killicon', 'custom kill icon'],
             ['input-keystroke-x', 'keystroke overlay x'],
             ['input-keystroke-y', 'keystroke overlay y'],
+            ['input-frame-cap', 'custom frame cap'],
         ]) {
             const el = $(id);
             if (el) el.value = s[key] ?? '';
@@ -233,6 +234,9 @@ window.api.getSettings().then(settings => {
 
         const chatMode = s['game chat'] || 'default';
         $('group-chat-mode')?.querySelectorAll('.btn-box').forEach(b => b.classList.toggle('active', b.dataset.val === chatMode));
+
+        const maxPending = String(s['max pending frames'] || '1');
+        $('group-max-pending-frames')?.querySelectorAll('.btn-box').forEach(b => b.classList.toggle('active', b.dataset.val === maxPending));
 
         for (const [iId, vId, key] of [
             ['input-ui-opacity', 'val-ui-opacity', 'in-game ui opacity'],
@@ -403,6 +407,11 @@ window.api.getSettings().then(settings => {
         }));
     };
     bindButtonGroup('group-chat-mode', val => window.api.updateSetting('game chat', val));
+    bindButtonGroup('group-max-pending-frames', val => {
+        const num = parseInt(val, 10) || 1;
+        settings['max pending frames'] = num;
+        window.api.updateSetting('max pending frames', num);
+    });
     bindButtonGroup('proxy-mode-group', val => {
         settings['proxy mode'] = val;
         window.api.updateSetting('proxy mode', val);
@@ -445,6 +454,7 @@ window.api.getSettings().then(settings => {
     };
     bindIntInput('input-keystroke-x', 'keystroke overlay x');
     bindIntInput('input-keystroke-y', 'keystroke overlay y');
+    bindIntInput('input-frame-cap', 'custom frame cap');
 
     let activeKeybindHandler = null;
     let activeKeybindUpHandler = null;

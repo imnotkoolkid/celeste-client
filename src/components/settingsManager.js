@@ -9,7 +9,6 @@ const ALWAYS_SAFE_GPU_SWITCHES = [
     'force-high-performance-gpu',
     'enable-gpu-rasterization',
     'enable-zero-copy',
-    ['enable-features', 'CanvasOopRasterization,UseSkiaRenderer,VaapiVideoDecodeLinuxGL'],
     ['enable-hardware-overlays', 'single-fullscreen,single-on-top,underlay'],
     ['num-raster-threads', require('os').cpus().length.toString()],
 ];
@@ -111,11 +110,22 @@ class SettingsManager {
             }
         }
 
+        const enabledFeatures = ['CanvasOopRasterization', 'UseSkiaRenderer', 'VaapiVideoDecodeLinuxGL'];
         if (this.settings['unlimited fps']) {
             for (const sw of UNCAP_FPS_SWITCHES) {
                 Array.isArray(sw) ? app.commandLine.appendSwitch(...sw) : app.commandLine.appendSwitch(sw);
             }
+            const cap = parseInt(this.settings['custom frame cap'] || 0, 10);
+            if (cap >= 30 && cap <= 1000) {
+                enabledFeatures.push(`CustomFrameCap:fps/${cap}`);
+            } else {
+                const pendingFrames = parseInt(this.settings['max pending frames'] || 1, 10);
+                if (pendingFrames > 1) {
+                    enabledFeatures.push(`CustomMaxPendingFrames:count/${pendingFrames}`);
+                }
+            }
         }
+        app.commandLine.appendSwitch('enable-features', enabledFeatures.join(','));
 
         if (this.settings['mask ip'] || this.settings['incognito always mask ip']) {
             app.commandLine.appendSwitch('force-webrtc-ip-handling-policy', 'disable_non_proxied_udp');

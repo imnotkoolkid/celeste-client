@@ -35,6 +35,10 @@ function registerIpcHandlers(updaterOpts = {}) {
           const ses = windowManager.getIncognitoSession(e.sender.id);
           if (ses) await proxyManager.applyProxyToSession(ses, s);
         }
+        if (key === 'custom frame cap') {
+          const win = BrowserWindow.fromWebContents(e.sender);
+          windowManager.applyFrameCapToWindow(win, value);
+        }
       }
       return { success: true };
     }
@@ -53,6 +57,9 @@ function registerIpcHandlers(updaterOpts = {}) {
     if (key === 'swapper enabled') {
       setSwapperEnabled(value);
     }
+    if (key === 'custom frame cap') {
+      windowManager.applyFrameCapToWindow(windowManager.getMainWindow(), value);
+    }
     return { success: true };
   });
 
@@ -66,9 +73,16 @@ function registerIpcHandlers(updaterOpts = {}) {
         settingsManager.scheduleSave();
         await proxyManager.applyProxySettings(settingsManager.settings);
         drpc.init(settingsManager.settings);
+        if ('custom frame cap' in newSettings) {
+          windowManager.applyFrameCapToWindow(windowManager.getMainWindow(), newSettings['custom frame cap']);
+        }
       } else {
         const ses = windowManager.getIncognitoSession(e.sender.id);
         if (ses) await proxyManager.applyProxyToSession(ses, target);
+        if ('custom frame cap' in newSettings) {
+          const win = BrowserWindow.fromWebContents(e.sender);
+          windowManager.applyFrameCapToWindow(win, newSettings['custom frame cap']);
+        }
       }
     }
     return { success: true };

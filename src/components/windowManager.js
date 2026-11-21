@@ -95,6 +95,16 @@ function closeSplash() {
   splashWindow = null;
 }
 
+function applyFrameCapToWindow(win, capVal) {
+  if (!win || win.isDestroyed() || typeof win.setFrameCap !== 'function') return;
+  const num = parseInt(capVal, 10) || 0;
+  try {
+    win.setFrameCap(num > 0 ? num : 0);
+  } catch (err) {
+    console.error('Failed to set frame cap on window:', err);
+  }
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     minWidth: 900,
@@ -116,6 +126,7 @@ function createWindow() {
 
   Menu.setApplicationMenu(null);
   mainWindow.on('page-title-updated', e => e.preventDefault());
+  applyFrameCapToWindow(mainWindow, settingsManager.get('custom frame cap'));
 
   let isWindowShown = false;
   const showMainWindow = () => {
@@ -274,6 +285,7 @@ async function createIncognitoWindow(useCurrentSettings = false) {
   incognitoWin.webContents.on('did-finish-load', () => {
     incognitoWin.webContents.setZoomLevel(baseSettings['zoom level'] || 0);
   });
+  applyFrameCapToWindow(incognitoWin, baseSettings['custom frame cap']);
 
   if (shouldMask && !cfg) {
     proxyManager.setProxyFailed(true, wcId, true);
@@ -346,5 +358,6 @@ module.exports = {
   handleZoom,
   toggleFullscreen,
   toggleDevTools,
-  getMainWindow
+  getMainWindow,
+  applyFrameCapToWindow
 };

@@ -2,9 +2,7 @@ const { contextBridge, ipcRenderer, webFrame } = require('electron');
 const fs = require('fs');
 const path = require('path');
 
-try {
-    webFrame.executeJavaScript(fs.readFileSync(path.join(__dirname, 'components', 'freezeBugFix.js'), 'utf8'));
-} catch (_) {}
+// Note: Aim-freeze bug is fixed natively at the engine level via bigjakk's patched Electron build (ws-priority + frame-pacing).
 
 try {
     if (!window.__celesteGpuPatched) {
