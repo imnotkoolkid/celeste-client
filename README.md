@@ -7,6 +7,7 @@
 -  Uncapped FPS 
 -  Custom Frame Cap 
 -  Resource Swapper 
+-  Custom Skin 
 -  Custom User CSS 
 -  Custom User Scripts 
 -  Keystroke Overlay

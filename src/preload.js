@@ -17,6 +17,13 @@ try {
     }
 } catch (_) {}
 
+try {
+    const skinScript = fs.readFileSync(path.join(__dirname, 'assets', 'scripts', 'customSkin.js'), 'utf8');
+    webFrame.executeJavaScript(skinScript);
+} catch (e) {
+    console.error('Failed to load customSkin.js:', e);
+}
+
 let currentSettings = {};
 const assetCache = new Map();
 let _fontBlobUrl = null;
@@ -122,6 +129,20 @@ function applyTabInfo(enabled) {
 
 function applySkipLoadingScreen(enabled) {
     setStyle('celeste-skip-loading-css', '.loading-scene { display: none !important; }', !!enabled);
+}
+
+function applyCustomSkin(s) {
+    if (!s) return;
+    window.dispatchEvent(new CustomEvent('celeste-update-skin-config', {
+        detail: {
+            enabled: !!s['custom skin enabled'],
+            ingameOnly: s['custom skin ingame only'] !== false,
+            mode: s['custom skin mode'] || 'color',
+            head: s['custom skin head'] || '#ff00ff',
+            body: s['custom skin body'] || '#00ff00',
+            url: s['custom skin url'] || ''
+        }
+    }));
 }
 
 function buildCombo(e) {
@@ -305,6 +326,7 @@ function applyAllSettings(s) {
     applyUIAnimations(s['ui animations']);
     applyTabInfo(s['show tab info']);
     applySkipLoadingScreen(s['skip loading screen']);
+    applyCustomSkin(s);
     applyKeystrokeOverlay(
         s['keystroke overlay'], s['keystroke overlay edit mode'],
         s['keystroke overlay x'], s['keystroke overlay y'],
@@ -339,6 +361,7 @@ const api = {
         else if (key === 'show tab info') applyTabInfo(value);
         else if (key === 'skip loading screen') applySkipLoadingScreen(value);
         else if (KEYSTROKE_KEYS.has(key)) reapplyKeystroke();
+        else if (key.startsWith('custom skin')) applyCustomSkin(currentSettings);
         return ipcRenderer.invoke('update-setting', key, value);
     },
     updateSettingsBulk: async (newSettings) => {

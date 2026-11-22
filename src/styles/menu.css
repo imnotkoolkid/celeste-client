@@ -162,6 +162,25 @@
 .setting-input::placeholder { color: var(--txt2); }
 .setting-input.num-input { width: 72px; }
 
+.setting-color-picker {
+  -webkit-appearance: none;
+  border: 1px solid var(--bg3);
+  width: 44px;
+  height: 26px;
+  border-radius: var(--br-rd2);
+  background: var(--bg1);
+  cursor: pointer;
+  padding: 2px 3px;
+  outline: none;
+}
+.setting-color-picker::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+.setting-color-picker::-webkit-color-swatch {
+  border: none;
+  border-radius: 2px;
+}
+
 .custom-dropdown {
   position: relative;
   user-select: none;

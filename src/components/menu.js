@@ -193,13 +193,15 @@ window.api.getSettings().then(settings => {
             ['toggle-show-tab-info', 'show tab info'],
             ['toggle-skip-loading-screen', 'skip loading screen'],
             ['toggle-swapper-enabled', 'swapper enabled'],
+            ['toggle-custom-skin-enabled', 'custom skin enabled'],
+            ['toggle-custom-skin-ingame-only', 'custom skin ingame only'],
             ['toggle-incognito-current-settings', 'incognito use current settings'],
             ['toggle-incognito-always-mask-ip', 'incognito always mask ip'],
             ['toggle-mask-ip', 'mask ip'],
         ];
         for (const [id, key] of togglePairs) {
             const el = $(id);
-            if (el) el.checked = !!(key === 'rpc match info' || key === 'ui animations' ? s[key] !== false : s[key]);
+            if (el) el.checked = !!(key === 'rpc match info' || key === 'ui animations' || key === 'custom skin ingame only' ? s[key] !== false : s[key]);
         }
 
         for (const [id, key] of [
@@ -208,6 +210,7 @@ window.api.getSettings().then(settings => {
             ['input-keystroke-x', 'keystroke overlay x'],
             ['input-keystroke-y', 'keystroke overlay y'],
             ['input-frame-cap', 'custom frame cap'],
+            ['input-custom-skin-url', 'custom skin url'],
         ]) {
             const el = $(id);
             if (el) el.value = s[key] ?? '';
@@ -237,6 +240,18 @@ window.api.getSettings().then(settings => {
 
         const maxPending = String(s['max pending frames'] || '1');
         $('group-max-pending-frames')?.querySelectorAll('.btn-box').forEach(b => b.classList.toggle('active', b.dataset.val === maxPending));
+
+        const skinHead = $('input-custom-skin-head');
+        if (skinHead) skinHead.value = s['custom skin head'] || '#ff00ff';
+        const skinBody = $('input-custom-skin-body');
+        if (skinBody) skinBody.value = s['custom skin body'] || '#00ff00';
+
+        const skinMode = s['custom skin mode'] || 'color';
+        $('custom-skin-mode-group')?.querySelectorAll('.btn-box').forEach(b => b.classList.toggle('active', b.dataset.val === skinMode));
+        const skinColorCont = $('custom-skin-color-container');
+        const skinUrlCont = $('custom-skin-url-container');
+        if (skinColorCont) skinColorCont.style.display = skinMode === 'color' ? 'block' : 'none';
+        if (skinUrlCont) skinUrlCont.style.display = skinMode === 'url' ? 'block' : 'none';
 
         for (const [iId, vId, key] of [
             ['input-ui-opacity', 'val-ui-opacity', 'in-game ui opacity'],
@@ -321,6 +336,8 @@ window.api.getSettings().then(settings => {
         ['toggle-show-tab-info', 'show tab info'],
         ['toggle-skip-loading-screen', 'skip loading screen'],
         ['toggle-swapper-enabled', 'swapper enabled'],
+        ['toggle-custom-skin-enabled', 'custom skin enabled'],
+        ['toggle-custom-skin-ingame-only', 'custom skin ingame only'],
         ['toggle-incognito-current-settings', 'incognito use current settings'],
         ['toggle-incognito-always-mask-ip', 'incognito always mask ip'],
     ].forEach(([id, key]) => bindToggle(id, key));
@@ -338,6 +355,20 @@ window.api.getSettings().then(settings => {
     const bindInput = (id, key) => $(id)?.addEventListener('input', e => window.api.updateSetting(key, e.target.value));
     bindInput('input-hitmarker', 'custom hitmarker');
     bindInput('input-killicon', 'custom kill icon');
+    bindInput('input-custom-skin-url', 'custom skin url');
+
+    const bindColorInput = (id, key) => {
+        const el = $(id);
+        if (!el) return;
+        const onColor = e => {
+            settings[key] = e.target.value;
+            window.api.updateSetting(key, e.target.value);
+        };
+        el.addEventListener('input', onColor);
+        el.addEventListener('change', onColor);
+    };
+    bindColorInput('input-custom-skin-head', 'custom skin head');
+    bindColorInput('input-custom-skin-body', 'custom skin body');
 
     let proxyDebounceTimer = null;
     let _lastProxyHint = 0;
@@ -407,6 +438,14 @@ window.api.getSettings().then(settings => {
         }));
     };
     bindButtonGroup('group-chat-mode', val => window.api.updateSetting('game chat', val));
+    bindButtonGroup('custom-skin-mode-group', val => {
+        settings['custom skin mode'] = val;
+        window.api.updateSetting('custom skin mode', val);
+        const skinColorCont = $('custom-skin-color-container');
+        const skinUrlCont = $('custom-skin-url-container');
+        if (skinColorCont) skinColorCont.style.display = val === 'color' ? 'block' : 'none';
+        if (skinUrlCont) skinUrlCont.style.display = val === 'url' ? 'block' : 'none';
+    });
     bindButtonGroup('group-max-pending-frames', val => {
         const num = parseInt(val, 10) || 1;
         settings['max pending frames'] = num;

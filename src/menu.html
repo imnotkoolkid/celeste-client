@@ -398,6 +398,42 @@
             <button id="btn-open-swapper-folder" class="menu-action-btn">Open Folder</button>
           </div>
         </div>
+        <div class="setting-category">
+          <div class="category-header">Custom Skin</div>
+          <div class="setting-item sub-item">
+            <span class="setting-label">Enable Custom Skin</span>
+            <label class="toggle-switch"><input type="checkbox" id="toggle-custom-skin-enabled"><span
+                class="slider"></span></label>
+          </div>
+          <div class="setting-item sub-item">
+            <span class="setting-label">Only In-Game</span>
+            <label class="toggle-switch"><input type="checkbox" id="toggle-custom-skin-ingame-only" checked><span
+                class="slider"></span></label>
+          </div>
+          <div class="setting-item sub-item">
+            <span class="setting-label">Mode</span>
+            <div class="button-group" id="custom-skin-mode-group">
+              <span class="btn-box active" data-val="color">Color Picker</span>
+              <span class="btn-box" data-val="url">URL</span>
+            </div>
+          </div>
+          <div id="custom-skin-color-container">
+            <div class="setting-item sub-item">
+              <span class="setting-label">Head</span>
+              <input type="color" class="setting-color-picker" id="input-custom-skin-head" value="#ff00ff">
+            </div>
+            <div class="setting-item sub-item">
+              <span class="setting-label">Body</span>
+              <input type="color" class="setting-color-picker" id="input-custom-skin-body" value="#00ff00">
+            </div>
+          </div>
+          <div id="custom-skin-url-container" style="display: none;">
+            <div class="setting-item sub-item">
+              <span class="setting-label">Skin URL</span>
+              <input type="text" class="setting-input" id="input-custom-skin-url" placeholder="https://.../.png">
+            </div>
+          </div>
+        </div>
       </div>
 
     </div>
