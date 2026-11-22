@@ -1,5 +1,5 @@
 # Celeste Client
-> work in progress, current state does not represent final product
+#1 most performant kirka client 
 
 ## Build Instructions
 
@@ -26,4 +26,3 @@ The compiled executable will be located in the `dist` folder.
 
 ## Credits
 
-- [robertpakalns](https://github.com/robertpakalns) - rAF yield freeze bug fix (`src/components/freezeBugFix.js`), originally from [redline-client](https://github.com/robertpakalns/redline-client)
