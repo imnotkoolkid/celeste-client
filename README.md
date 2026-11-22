@@ -23,6 +23,3 @@ To build the client for your current operating system, run:
 npm run build
 ```
 The compiled executable will be located in the `dist` folder.
-
-## Credits
-
