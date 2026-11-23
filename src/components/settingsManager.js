@@ -4,7 +4,6 @@ const fs = require('fs');
 const { exec } = require('child_process');
 
 const ALWAYS_SAFE_GPU_SWITCHES = [
-    'ignore-gpu-blacklist',
     'ignore-gpu-blocklist',
     'force-high-performance-gpu',
     'enable-gpu-rasterization',
@@ -94,7 +93,9 @@ class SettingsManager {
             });
         }
 
-        const angleBackend = this.settings['angle backend'] || 'default';
+        const rawBackend = this.settings['angle backend'] || 'default';
+        const angleBackend = rawBackend === 'd3d9' ? 'default' : rawBackend;
+        if (rawBackend === 'd3d9') this.settings['angle backend'] = 'default';
         if (process.platform === 'win32') {
             app.commandLine.appendSwitch('use-gl', 'angle');
             app.commandLine.appendSwitch('use-angle', angleBackend !== 'default' ? angleBackend : 'd3d11');

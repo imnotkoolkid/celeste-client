@@ -387,15 +387,4 @@ function closeAll() {
     gates.clear();
 }
 
-function snapshot() {
-    return [...gates.values()].map(({ gate }) => ({
-        proxy: `${gate.upstream.host}:${gate.upstream.port}`,
-        limit: gate.max,
-        open: gate.conns.size,
-        kept: [...gate.conns].filter(c => c.keep).length,
-        waiting: gate.queue.length,
-        ...gate.stats
-    }));
-}
-
-module.exports = { acquire, release, closeAll, snapshot, SUPPORTED: new Set(['http', 'https', 'socks5']) };
+module.exports = { acquire, release, closeAll, SUPPORTED: new Set(['http', 'https', 'socks5']) };

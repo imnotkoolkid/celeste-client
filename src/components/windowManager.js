@@ -144,7 +144,12 @@ function createWindow() {
   });
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
+    try {
+      const parsed = new URL(url);
+      if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+        shell.openExternal(url);
+      }
+    } catch (_) {}
     return { action: 'deny' };
   });
 
@@ -243,7 +248,12 @@ async function createIncognitoWindow(useCurrentSettings = false) {
   incognitoWin.maximize();
   incognitoWin.on('page-title-updated', e => e.preventDefault());
   incognitoWin.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
+    try {
+      const parsed = new URL(url);
+      if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+        shell.openExternal(url);
+      }
+    } catch (_) {}
     return { action: 'deny' };
   });
 

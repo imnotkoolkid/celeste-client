@@ -10,7 +10,6 @@ const { initResourceSwapper } = require('./components/swapper');
 app.setName('Celeste Client');
 app.setAppUserModelId('dev.imnotkoolkid.celesteclient');
 
-app.commandLine.appendSwitch('ignore-gpu-blocklist');
 app.commandLine.appendSwitch('disable-renderer-backgrounding');
 app.commandLine.appendSwitch('disable-background-timer-throttling');
 app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
@@ -94,6 +93,11 @@ function installUpdate() {
 
 app.on('web-contents-created', (_, wc) => {
   proxyManager.trackWebContents(wc);
+  setTimeout(boostProcessPriorities, 500);
+});
+
+app.on('gpu-process-crashed', (_event, _killed) => {
+  setTimeout(boostProcessPriorities, 1000);
 });
 
 app.whenReady().then(async () => {
@@ -108,9 +112,11 @@ app.whenReady().then(async () => {
   await initResourceSwapper(settingsManager.get('swapper enabled') !== false);
   await proxyManager.applyProxySettings(settingsManager.settings);
   windowManager.createSplash();
-  windowManager.createWindow();
+  const mainWin = windowManager.createWindow();
+
 
   boostProcessPriorities();
+  mainWin.webContents.once('did-finish-load', boostProcessPriorities);
 
   if (app.isPackaged) {
     setTimeout(configureAndCheckUpdater, 3000);

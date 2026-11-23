@@ -2,21 +2,6 @@ const { contextBridge, ipcRenderer, webFrame } = require('electron');
 const fs = require('fs');
 const path = require('path');
 
-// Note: Aim-freeze bug is fixed natively at the engine level via bigjakk's patched Electron build (ws-priority + frame-pacing).
-
-try {
-    if (!window.__celesteGpuPatched) {
-        window.__celesteGpuPatched = true;
-        const _orig = HTMLCanvasElement.prototype.getContext;
-        HTMLCanvasElement.prototype.getContext = function (type, attrs) {
-            if (type === 'webgl' || type === 'webgl2' || type === 'experimental-webgl') {
-                attrs = Object.assign({}, attrs || {}, { powerPreference: 'high-performance', desynchronized: true });
-            }
-            return _orig.call(this, type, attrs);
-        };
-    }
-} catch (_) {}
-
 try {
     const skinScript = fs.readFileSync(path.join(__dirname, 'assets', 'scripts', 'customSkin.js'), 'utf8');
     webFrame.executeJavaScript(skinScript);
