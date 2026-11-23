@@ -184,6 +184,7 @@ window.api.getSettings().then(settings => {
         const togglePairs = [
             ['toggle-unlimited-fps', 'unlimited fps'],
             ['toggle-start-fullscreen', 'start fullscreen'],
+            ['toggle-disable-dpi-scaling', 'disable dpi scaling'],
             ['toggle-celeste-theme', 'celeste theme'],
             ['toggle-show-rpc', 'show rpc'],
             ['toggle-rpc-match-info', 'rpc match info'],
@@ -327,6 +328,7 @@ window.api.getSettings().then(settings => {
     [
         ['toggle-unlimited-fps', 'unlimited fps'],
         ['toggle-start-fullscreen', 'start fullscreen'],
+        ['toggle-disable-dpi-scaling', 'disable dpi scaling'],
         ['toggle-celeste-theme', 'celeste theme'],
         ['toggle-show-rpc', 'show rpc'],
         ['toggle-rpc-match-info', 'rpc match info'],

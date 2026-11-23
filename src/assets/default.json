@@ -3,6 +3,7 @@
   "max pending frames": 1,
   "custom frame cap": 0,
   "start fullscreen": true,
+  "disable dpi scaling": false,
   "swapper enabled": true,
   "custom skin enabled": false,
   "custom skin ingame only": true,

@@ -9,6 +9,30 @@ try {
     console.error('Failed to load customSkin.js:', e);
 }
 
+try {
+    webFrame.executeJavaScript(`(() => {
+        if (window.__celesteRawInputInitialized) return;
+        window.__celesteRawInputInitialized = true;
+        const origRequestPointerLock = Element.prototype.requestPointerLock;
+        if (typeof origRequestPointerLock === 'function') {
+            Element.prototype.requestPointerLock = function(options) {
+                const opts = { unadjustedMovement: true, ...(typeof options === 'object' && options ? options : {}) };
+                try {
+                    const res = origRequestPointerLock.call(this, opts);
+                    if (res && typeof res.catch === 'function') {
+                        return res.catch(() => origRequestPointerLock.call(this, options));
+                    }
+                    return res;
+                } catch (_) {
+                    return origRequestPointerLock.call(this, options);
+                }
+            };
+        }
+    })();`);
+} catch (e) {
+    console.error('Failed to initialize raw mouse input:', e);
+}
+
 let currentSettings = {};
 const assetCache = new Map();
 let _fontBlobUrl = null;

@@ -112,6 +112,11 @@ class SettingsManager {
         }
 
         const enabledFeatures = ['CanvasOopRasterization', 'UseSkiaRenderer', 'VaapiVideoDecodeLinuxGL'];
+        if (process.platform === 'win32') {
+            const pendingFrames = parseInt(this.settings['max pending frames'] || 1, 10);
+            const dxgiFrames = Math.max(1, Math.min(pendingFrames, 3));
+            enabledFeatures.push(`DXGIWaitableSwapChain:DXGIWaitableSwapChainMaxQueuedFrames/${dxgiFrames}`);
+        }
         if (this.settings['unlimited fps']) {
             for (const sw of UNCAP_FPS_SWITCHES) {
                 Array.isArray(sw) ? app.commandLine.appendSwitch(...sw) : app.commandLine.appendSwitch(sw);
@@ -127,6 +132,11 @@ class SettingsManager {
             }
         }
         app.commandLine.appendSwitch('enable-features', enabledFeatures.join(','));
+
+        if (this.settings['disable dpi scaling']) {
+            app.commandLine.appendSwitch('high-dpi-support', '1');
+            app.commandLine.appendSwitch('force-device-scale-factor', '1');
+        }
 
         if (this.settings['mask ip'] || this.settings['incognito always mask ip']) {
             app.commandLine.appendSwitch('force-webrtc-ip-handling-policy', 'disable_non_proxied_udp');
