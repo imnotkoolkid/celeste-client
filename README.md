@@ -2,6 +2,8 @@
 
 [CLICK TO DOWNLOAD](https://github.com/imnotkoolkid/celeste-client/releases/latest)
 
+>Facing any issues or have suggestions? Feel free to reach out [here](https://discord.com/users/841926384838115358)
+
 ## Features
 
 -  Uncapped FPS 
